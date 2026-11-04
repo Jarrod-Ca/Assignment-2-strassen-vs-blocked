@@ -51,12 +51,12 @@ def main() -> None:
 
     # ---------------- drift monitor
     refs = []
-    for f in sorted(R.glob("E[0-9]_*.csv")):
+    for f in sorted(R.glob("E[0-9]*_*.csv")):
         d = pd.read_csv(f)
         if "ref_gflops" not in d:
             continue  # E8 is not timed
         call = (d["ref_gflops"] != d["ref_gflops"].shift()).cumsum()
-        exp = f.name[:2]
+        exp = f.name.split("_")[0]
         base_exp = float(md.run_info(R, exp)["drift_monitor_baseline"].split()[0])  # that run's own baseline
         refs.append(d.groupby(call)["ref_gflops"].first().to_frame().assign(exp=exp, baseline=base_exp))
     refs = pd.concat(refs, ignore_index=True)

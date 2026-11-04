@@ -4,7 +4,7 @@ Machine: AMD Ryzen 7 7800X3D 8-Core Processor; Microsoft Windows [Version 10.0.2
 
 ## Drift monitor
 
-276 readings; main-run baseline 25.14 GFLOP/s (follow-up runs use their own); 89.5% within ±5%; range 90.2–100.4%.
+288 readings; main-run baseline 25.14 GFLOP/s (follow-up runs use their own); 89.2% within ±5%; range 90.2–100.4%.
 
 | exp   |   min |   median |   max |   count |
 |:------|------:|---------:|------:|--------:|
@@ -17,6 +17,7 @@ Machine: AMD Ryzen 7 7800X3D 8-Core Processor; Microsoft Windows [Version 10.0.2
 | E6    |  93.9 |     95.8 |  97.4 |   105.0 |
 | E7    |  95.8 |     99.6 | 100.0 |     6.0 |
 | E9    |  90.2 |     95.8 | 100.3 |    35.0 |
+| E9b   |  91.9 |     95.9 |  99.9 |    12.0 |
 
 
 ## E0 pilot: variance and repetition count
