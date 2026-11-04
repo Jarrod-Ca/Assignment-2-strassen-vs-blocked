@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "common/compare.hpp"
 #include "common/generators.hpp"
 #include "reference/naive.hpp"
@@ -93,4 +95,36 @@ TEST(compare_utilities) {
     Huge(0, 0) = 1e300; Huge(0, 1) = 1e300;  // naive sum of squares would overflow
     CHECK_NEAR(frobenius_norm(Huge) / 1e300, std::sqrt(2.0), 1e-15);
     CHECK_THROWS(max_abs_diff(X, Matrix(3, 3)));
+}
+
+TEST(componentwise_metrics) {
+    Matrix C(1, 3), R(1, 3), D(1, 3);
+    R(0, 0) = 4.0; R(0, 1) = -2.0; R(0, 2) = 0.0;
+    C(0, 0) = 4.5; C(0, 1) = -2.0; C(0, 2) = 0.0;
+    D(0, 0) = 10.0; D(0, 1) = 1.0; D(0, 2) = 0.0;
+    CHECK(max_componentwise_ratio(C, R, D) == 0.05);
+    CHECK(max_entrywise_relative_error(C, R) == 0.125);
+    C(0, 2) = 1e-30;  // error where the reference is exactly zero
+    CHECK(std::isinf(max_componentwise_ratio(C, R, D)));
+    CHECK(std::isinf(max_entrywise_relative_error(C, R)));
+    Matrix A(1, 2), absA(1, 2);
+    A(0, 0) = -3.0; A(0, 1) = 2.0;
+    abs_into(A, absA);
+    CHECK(absA(0, 0) == 3.0 && absA(0, 1) == 2.0);
+    CHECK(checksum(A) == -1.0);
+}
+
+TEST(classical_error_respects_componentwise_bound) {
+    // |C - C_hat| <= gamma_n |A||B| must hold for the naive (classical) loop.
+    const std::size_t n = 64;
+    Matrix A = make_wide_range(n, n, 31, 20), B = make_wide_range(n, n, 32, 20);
+    Matrix C(n, n), ref(n, n), absA(n, n), absB(n, n), D(n, n);
+    naive_multiply(A, B, C);
+    reference_multiply_dd(A, B, ref);
+    abs_into(A, absA);
+    abs_into(B, absB);
+    naive_multiply(absA, absB, D);
+    const double u = std::ldexp(1.0, -53);
+    const double gamma_n = n * u / (1 - n * u);
+    CHECK(max_componentwise_ratio(C, ref, D) <= gamma_n);
 }
