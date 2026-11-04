@@ -112,8 +112,10 @@ void copy_into_top_left(CV src, MV dst) {
 
 void validate(const Params& p) {
     if (p.cutoff == 0) throw std::invalid_argument("strassen: cutoff must be >= 1");
-    if (p.padding != Padding::Minimal && p.padding != Padding::NextPow2)
+    if (p.padding != Padding::Minimal && p.padding != Padding::NextPow2 && p.padding != Padding::Aligned)
         throw std::invalid_argument("strassen: unknown padding mode");
+    if (p.padding == Padding::Aligned && (p.leaf_align == 0 || p.cutoff < p.leaf_align))
+        throw std::invalid_argument("strassen: aligned padding needs 1 <= leaf_align <= cutoff");
     blocked::validate(p.base);
 }
 
@@ -127,6 +129,13 @@ std::size_t padded_size(std::size_t n, const Params& p) {
     }
     std::size_t s = n, d = 0;
     while (s > p.cutoff) { s = (s + 1) / 2; ++d; }  // ceil-halving: s = ceil(n / 2^d)
+    if (p.padding == Padding::Aligned) {
+        auto round_up = [&](std::size_t x) { return (x + p.leaf_align - 1) / p.leaf_align * p.leaf_align; };
+        // Rounding can push the leaf past the cutoff; then halve once more. Terminates
+        // because leaf_align <= cutoff (validated): as s -> 1, round_up(s) = leaf_align.
+        while (round_up(s) > p.cutoff) { s = (s + 1) / 2; ++d; }
+        s = round_up(s);
+    }
     return s << d;
 }
 
@@ -198,12 +207,20 @@ Stats multiply(ConstMatrixView A, ConstMatrixView B, MatrixView C, const Params&
     return plan.execute(A, B, C);
 }
 
-const char* padding_name(Padding p) { return p == Padding::NextPow2 ? "nextpow2" : "minimal"; }
+const char* padding_name(Padding p) {
+    switch (p) {
+        case Padding::NextPow2: return "nextpow2";
+        case Padding::Aligned: return "aligned";
+        case Padding::Minimal: break;
+    }
+    return "minimal";
+}
 
 Padding parse_padding(const char* name) {
     const std::string s(name);
     if (s == "minimal") return Padding::Minimal;
     if (s == "nextpow2") return Padding::NextPow2;
+    if (s == "aligned") return Padding::Aligned;
     throw std::invalid_argument("unknown padding mode: " + s);
 }
 

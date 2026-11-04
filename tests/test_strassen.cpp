@@ -39,6 +39,47 @@ TEST(strassen_padded_size_rules) {
     CHECK_EQ(strassen::padded_size(64, params(64, Padding::NextPow2)), 64u);
 }
 
+TEST(strassen_aligned_padding_rules) {
+    auto aligned = [](std::size_t cutoff, std::size_t align) {
+        strassen::Params p = params(cutoff, Padding::Aligned);
+        p.leaf_align = align;
+        return p;
+    };
+    CHECK_EQ(strassen::padded_size(1028, aligned(128, 4)), 1088u);  // leaf 65 -> 68, 68 * 16
+    CHECK_EQ(strassen::padded_size(1028, aligned(128, 8)), 1152u);  // leaf 65 -> 72, 72 * 16
+    CHECK_EQ(strassen::padded_size(1024, aligned(128, 4)), 1024u);  // leaf 128 already aligned
+    CHECK_EQ(strassen::padded_size(1020, aligned(128, 8)), 1024u);  // leaf 128 (1020 -> 510 -> 255 -> 128)
+    CHECK_EQ(strassen::padded_size(100, aligned(128, 4)), 100u);    // below cutoff: no recursion, no padding
+    // Rounding past the cutoff forces one more halving: n = 127 * 2 = 254, cutoff 126, align 4:
+    // minimal leaf 127 -> 128 > 126, so halve again: leaf ceil(254/4) = 64 (aligned), m = 256.
+    CHECK_EQ(strassen::padded_size(254, aligned(126, 4)), 256u);
+    // The leaf of every aligned plan is a multiple of leaf_align.
+    for (std::size_t n = 129; n < 1200; n += 7)
+        for (std::size_t a : {4u, 8u}) {
+            const auto st = strassen::predict(n, aligned(128, a));
+            CHECK(st.base_size % a == 0 && st.base_size <= 128);
+        }
+    CHECK_THROWS(strassen::padded_size(500, aligned(2, 4)));  // leaf_align > cutoff
+    CHECK(strassen::parse_padding("aligned") == Padding::Aligned);
+    CHECK(std::string(strassen::padding_name(Padding::Aligned)) == "aligned");
+}
+
+TEST(strassen_aligned_padding_is_exact) {
+    for (std::size_t n : {33u, 61u, 100u, 129u, 200u}) {
+        Matrix A = make_small_int(n, n, 700 + n, 8), B = make_small_int(n, n, 800 + n, 8), ref(n, n);
+        reference::naive_multiply(A, B, ref);
+        for (std::size_t c : {8u, 16u, 33u})
+            for (std::size_t a : {4u, 8u}) {
+                strassen::Params p = params(c, Padding::Aligned, 7);
+                p.leaf_align = a;
+                Matrix C(n, n);
+                const strassen::Stats st = strassen::multiply(A, B, C, p);
+                CHECK(exactly_equal(C, ref));
+                CHECK(same_stats(st, strassen::predict(n, p)));
+            }
+    }
+}
+
 TEST(strassen_exact_on_small_int_all_sizes_1_to_130) {
     // Integer inputs make every intermediate exact, so Strassen must equal naive bit-for-bit.
     // Cutoff 1 = "pure" Strassen down to 1x1 (7^8 leaves at n=256, so only run it for

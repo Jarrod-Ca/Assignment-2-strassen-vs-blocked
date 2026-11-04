@@ -23,6 +23,14 @@
 //                   Minimal  : m = s * 2^d with d the fewest halvings that bring
 //                              ceil(n / 2^d) <= cutoff  (e.g. n=1025, cutoff=64 -> 1056)
 //                   NextPow2 : m = next power of two >= n  (e.g. 1025 -> 2048)
+//                   Aligned  : like Minimal, but the leaf size s is rounded up to a
+//                              multiple of leaf_align (taking one more halving if
+//                              that would exceed the cutoff), so every leaf row and
+//                              every temporary's row stride is a whole number of
+//                              leaf_align doubles (e.g. n=1028, cutoff=128, align 4:
+//                              leaf 65 -> 68, m = 1088). Added after experiment E4
+//                              showed Minimal is slow exactly when the leaf size is
+//                              not a multiple of 4 (follow-up experiment E9).
 //   * workspace - each recursion level needs 3 temporaries of (n/2)^2 (two operand
 //                 sums and one product); total ~ n^2 doubles, allocated once per
 //                 Plan, never inside the recursion.
@@ -38,11 +46,12 @@
 
 namespace mm::strassen {
 
-enum class Padding { Minimal, NextPow2 };
+enum class Padding { Minimal, NextPow2, Aligned };
 
 struct Params {
     std::size_t cutoff = 128;     // recurse only while size > cutoff; must be >= 1
     Padding padding = Padding::Minimal;
+    std::size_t leaf_align = 4;   // Aligned padding only: leaf size rounded up to a multiple of this
     blocked::Params base{};       // tile size used by the base-case kernel
     // Extra elements added to the row stride of every recursion temporary
     // (stride = h + temp_pad). At power-of-two h, a stride of h doubles maps
@@ -101,6 +110,6 @@ private:
 Stats multiply(ConstMatrixView A, ConstMatrixView B, MatrixView C, const Params& p = {});
 
 const char* padding_name(Padding p);
-Padding parse_padding(const char* name);  // "minimal" | "nextpow2"; throws on anything else
+Padding parse_padding(const char* name);  // "minimal" | "nextpow2" | "aligned"; throws on anything else
 
 }  // namespace mm::strassen
