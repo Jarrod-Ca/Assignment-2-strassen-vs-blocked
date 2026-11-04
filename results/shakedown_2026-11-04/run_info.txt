@@ -1,0 +1,37 @@
+==== run started 2026-11-04 15:22:55 ====
+mode: full
+experiments: E0 E1 E2 E3 E4 E5 E6 E7 E8
+cpu: AMD Ryzen 7 7800X3D 8-Core Processor
+logical_cpus: 16
+os: Microsoft Windows [Version 10.0.26200.9711]
+ram_gb: 31.1
+compiler: MSVC 19.51.36260.0
+build: Release (NDEBUG)
+flags: /W4 /permissive- /EHsc /fp:precise /arch:AVX2 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG
+git_commit: dcf671a (DIRTY: uncommitted changes)
+power_plan: Ultimate Performance
+timer: steady_clock tick 1 ns, resolution 100 ns, overhead 16.8 ns/call
+bench_cpu: 2 (pinned)
+antagonist_cpu: 6
+priority: process HIGH_PRIORITY_CLASS ok, thread HIGHEST ok
+reps: 7
+pilot_reps: 30
+min_sample_s: 0.02
+base_seed: 20261104
+skip_large: no
+calibration: blocked 18.0027 GFLOP/s, dd reference 4.3355 ns per n^3
+tuned_tile: 192 (E1 2026-11-04 15:24:32 commit dcf671a)
+tuned_cutoff: 128 (E2 2026-11-04 15:28:57 commit dcf671a)
+runtime per experiment (actual / estimated):
+  E0        6.6s / 7.4s
+  E1      1m 31s / 1m 50s
+  E2      4m 24s / 6m 05s
+  E3      3m 19s / 4m 30s
+  E4      2m 31s / 2m 58s
+  E5       55.5s / 1m 04s
+  E6      4m 13s / 4m 27s
+  E7      2m 11s / 2m 38s
+  E8       58.2s / 54.4s
+  total 20m 09s / 24m 34s
+==== run finished 2026-11-04 15:43:04 ====
+
