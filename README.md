@@ -171,8 +171,8 @@ applications.
 | E6 | L3 occupied by a pinned antagonist thread: 0 / 1 (control) / 32 / 64 / 80 MB (P7) | `E6_cache_pressure.csv` |
 | E7 | Allocation cost: reused `Plan` vs `strassen::multiply` per call (P11) | `E7_allocation.csv` |
 | E8 | Accuracy vs the double-double reference; Frobenius, normwise and componentwise (P12–P14) | `E8_accuracy.csv` |
-| E9 | *Follow-up, added after E4.* Is minimal padding slow when the leaf size is not a multiple of 4? Compares `minimal` with `aligned` padding (leaf rounded up to a multiple of 4 or 8) over n = 1000–1100 and 2000–2100. Run separately with `--only E9`. | `E9_alignment.csv` |
-| E9b | *Follow-up, added after E9.* Two identical `aligned4` variants run in both execution orders, to tell a carry-over effect from memory placement. Run separately with `--only E9b`. | `E9b_order.csv` |
+| E9 | *Follow-up, added after E4.* Is minimal padding slow when the leaf size is not a multiple of 4? Compares `minimal` with `aligned` padding (leaf rounded up to a multiple of 4 or 8) over n = 1000–1100 and 2000–2100. Included in a full run; the official data came from a separate `--only E9` run. | `E9_alignment.csv` |
+| E9b | *Follow-up, added after E9.* Two identical `aligned4` variants run in both execution orders, to tell a carry-over effect from memory placement. Included in a full run; the official data came from a separate `--only E9b` run. | `E9b_order.csv` |
 
 Tuned parameters are selected from the data, not chosen by hand. For each
 configuration, every candidate's median time is divided by the best median in
@@ -226,7 +226,7 @@ experiments stay consistent with the tuning.
 ## Reproducing the experiments
 
 1. Build `windows-release`, then run `ctest --preset windows-release`.
-2. Run `.\build\windows-release\mm_bench.exe`. This regenerates every CSV in `results/`.
+2. Run `.\build\windows-release\mm_bench.exe` (E0–E9b, about 30 minutes). This regenerates every CSV in `results/`.
 3. Run `python scripts/analyse.py`. This writes the summary tables, the
    cost-model check and the predictions-vs-results table to `results/summary/`.
 4. Run `python scripts/make_plots.py`. This regenerates every figure in `figures/`.

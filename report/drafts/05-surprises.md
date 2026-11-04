@@ -1,6 +1,6 @@
 # 5. What surprised us
 
-Three predictions failed in ways that taught us something about the algorithms (P6, P10), or about our own measurements. Each explanation below was tested, not just proposed. Two of the tests (E9, E9b) were designed after the surprise appeared, and their predictions were committed to the repository before they ran (`report/drafts/E9-preregistration.md`, `E9b-preregistration.md`).
+Three results taught us something about the algorithms (P6, P10) or about our own measurements. Each explanation was tested, not just proposed. Two tests (E9, E9b) were designed after the surprise appeared, with their predictions committed before they ran (`report/drafts/E9-preregistration.md`, `E9b-preregistration.md`).
 
 ## 5.1 The best tile is twice the "L1-sized" one, because the kernel is overhead-bound, not cache-bound
 
@@ -11,7 +11,7 @@ Three predictions failed in ways that taught us something about the algorithms (
 **What the tile size does control is how long each inner call runs.** Each call pays a fixed cost (loop set-up, the vector remainder, the branch at exit) that is amortised over T/4 vector iterations. If that is the limit, throughput should follow $F(T) = F_{\max}\, T/(T + T_0)$. We tested that claim:
 - **The overhead model fits E1** for T = 8–128 with R² = 0.95 (n = 1000), 0.98 (n = 256) and 0.89 (n = 2000). The fitted overhead is T₀ ≈ 27–30 elements per call, about seven vector iterations' worth.
 - **A cache explanation is inconsistent with the data.** Tiled multiplication at n = 1000 runs within 5–9% of a *single-tile* multiplication of the same width, where all data is cache-resident (T = 64: 24.5 vs 26.8 GFLOP/s; T = 128: 28.3 vs 29.7; the latter from E3 at n = T). If cache misses were the limit, the large problem would be far slower than the in-cache one.
-- **The model's one systematic miss is informative.** At n = 2000 it overestimates T ≥ 96 by up to 15%. There, the strip of C rows that a tile row sweeps (T × n × 8 bytes, 2 MB at T = 128) no longer fits in L2. That second-order memory effect is why the optimum moves to T = 192 and flattens.
+- **The model's one systematic miss is informative.** At n = 2000 it overestimates T ≥ 96 by up to 15%, because the strip of C rows a tile row sweeps (2 MB at T = 128) no longer fits in L2. That second-order memory effect flattens the optimum.
 
 The lesson: we reasoned about *where the data lives*, when this kernel is limited by *how much work each loop invocation gets*. A BLAS-style register-blocked micro-kernel (Goto & van de Geijn, 2008) removes exactly this overhead (§6).
 
@@ -19,7 +19,7 @@ The lesson: we reasoned about *where the data lives*, when this kernel is limite
 
 `minimal` padding minimises extra arithmetic (at most 3% around n = 1000), yet over n = 1000–1100 it was slower than blocked at 14 of 26 sizes (Figure 4b). Two neighbouring sizes show the effect: n = 1020 runs at 0.74× blocked, but n = 1028, which pads by only 12 rows, runs at 1.07×. Grouping by the leaf size where the recursion stops gives a sharp split. Leaves of 128 or 68 run at 0.71–0.78× blocked; leaves of 65, 67, 69, 125 or 127 run at 1.01–1.10×.
 
-**Hypothesis.** One AVX2 register holds 4 doubles. A leaf of width 65 leaves a scalar remainder on every row. More importantly, the recursion temporaries then have row strides of 65, 130, 260… doubles. Those are not multiples of 4, so leaf rows start at addresses that are not 32-byte aligned, and many vector loads straddle two cache lines.
+**Hypothesis.** One AVX2 register holds 4 doubles. A leaf of width 65 leaves a scalar remainder on every row, and the temporaries' row strides (65, 130, 260… doubles) are not multiples of 4, so leaf rows are not 32-byte aligned and many vector loads straddle two cache lines.
 
 **Test (E9, pre-registered).** We added an `aligned` padding mode that rounds the leaf up to a multiple of 4 (or 8), and swept 35 sizes in 1000–1100 and 2000–2100 (Figure 11).
 
@@ -48,7 +48,3 @@ E9 produced a contradiction. At eight sizes in 1000–1100, `aligned4` and `alig
 - **The control behaved as predicted:** 0.997 and 0.999, with both intervals containing 1.
 
 **It is a carry-over effect.** A Strassen variant runs faster after a near-identical computation than after one with a different padded layout. Prefetcher, TLB or branch-predictor state are the likely carriers; we did not isolate which. So within a configuration, Strassen variants differing by less than about 5% are not distinguishable. That covers E9's `aligned8` vs `aligned4` and E5's `temp_pad`. The headline results are unaffected: E3 and E6 alternate two variants symmetrically, and the effects in E1, E2, E4 and E9 are 7% or larger.
-
-## 5.4 A smaller surprise: Strassen wins twice
-
-Besides cutting flops, Strassen's recursion turns one large multiplication into many cache-resident 128 × 128 ones, which run at 29.7 GFLOP/s against blocked's 24.8 at n = 4096. That is why the speedup beat P5 (§4.1). In effect it is the cache-oblivious blocking (Frigo et al., 1999) that Algorithm A implements by hand.

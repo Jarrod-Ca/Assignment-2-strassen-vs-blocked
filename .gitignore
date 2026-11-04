@@ -2,6 +2,9 @@
 build/
 out/
 
+# Office lock files (created while a document is open in Word)
+~$*
+
 # Visual Studio / VS Code
 .vs/
 .vscode/
