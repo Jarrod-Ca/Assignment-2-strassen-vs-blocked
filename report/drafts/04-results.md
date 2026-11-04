@@ -53,7 +53,7 @@ The §2.3 break-even rule says it pays to recurse at size n when n/2 > 9.3r. Wit
 
 **`nextpow2` behaves exactly as predicted (P9).** One size past a power of two, the padded problem doubles in each dimension and gains a recursion level. Time jumps 6.8×, 7.1× and 7.3× at n = 513, 1025 and 2049; the theoretical jump is 7. That makes Strassen 3.0–3.8× *slower* than blocked at those sizes.
 
-**`minimal` padding avoids that cliff:** 0.64–0.82× blocked at 2^k + 1. But in the dense sweep it was slower than blocked at 14 of 26 sizes (worst 1.10×). That refutes P10. The pattern follows the leaf size, not the amount of padding, and §5.2 tests why.
+**`minimal` padding avoids that cliff:** 0.64–0.82× blocked at 2ᵏ + 1. But in the dense sweep it was slower than blocked at 14 of 26 sizes (worst 1.10×). That refutes P10. The pattern follows the leaf size, not the amount of padding, and §5.2 tests why.
 
 ## 4.4 Memory hierarchy
 
@@ -66,9 +66,9 @@ The §2.3 break-even rule says it pays to recurse at size n when n/2 > 9.3r. Wit
 - **Blocked** slows by 2.9–3.9% with 80 MB of the 96 MB L3 taken.
 - **Strassen** slows by 7.3–8.1%, about twice as much.
 
-Both responses follow from structure. Blocked re-reads B from L3 only once per 128 uses (about 16 flops per byte), so even DRAM bandwidth barely limits it. Strassen's additions are pure streaming at 24 bytes per flop, and they take about 15% of its time (Figure 10). If spilling their operands from L3 to DRAM raised the addition cost by about half, that alone would produce the 7–8%. The data is consistent with this, but we did not time the additions separately under pressure. Strassen's speedup over blocked falls by at most 4.1%, so P7's claim that L3 size barely matters holds.
+Blocked re-reads B from L3 only once per 128 uses (about 16 flops per byte), so even DRAM bandwidth barely limits it. Strassen's additions are pure streaming at 24 bytes per flop, and they take about 15% of its time (Figure 10). If spilling their operands from L3 to DRAM raised the addition cost by about half, that alone would produce the 7–8%. The data is consistent with this, but we did not time the additions separately under pressure. Strassen's speedup over blocked falls by at most 4.1%, so P7's claim that L3 size barely matters holds.
 
-The unusual 96 MB L3 is *not* what makes Strassen win. P7's other half failed, though: blocked does lose 15% from its peak between n = 256 and n = 4096. The loss is gradual, with no cliff at the point where the matrices outgrow L3.
+The unusual 96 MB L3 is *not* what makes Strassen win. P7's other half failed: blocked loses 15% from its peak between n = 256 and 4096, gradually, with no cliff where the matrices outgrow L3.
 
 ![Figure 5: E5 stride.](../../figures/fig5_stride.png)
 
@@ -82,7 +82,7 @@ The unusual 96 MB L3 is *not* what makes Strassen win. P7's other half failed, t
 
 *Figure 7. E7: extra time when Strassen allocates its workspace on every call, compared with reusing a `Plan`.*
 
-Allocating the workspace on every call costs 0.8–2.0% for n ≥ 1024, as P11 predicted, falling roughly as n^−0.8 (n² of workspace against n^2.81 of work). But it costs only 0.5–2.0% at n ≤ 256, not more than 5%, and peaks at 4.0% at n = 512. A plausible but untested explanation: small blocks are recycled by the allocator, while the 2 MB workspace at n = 512 is returned to the OS and re-mapped, with fresh page faults, on every call (§6).
+Allocating the workspace on every call costs 0.8–2.0% for n ≥ 1024, as P11 predicted, falling roughly as n⁻⁰·⁸ (n² of workspace against n²·⁸¹ of work). But it costs only 0.5–2.0% at n ≤ 256, not more than 5%, and peaks at 4.0% at n = 512. A plausible but untested explanation: small blocks are recycled by the allocator, while the 2 MB workspace at n = 512 is returned to the OS and re-mapped, with fresh page faults, on every call (§6).
 
 ## 4.6 Numerical accuracy
 
@@ -99,7 +99,7 @@ Allocating the workspace on every call costs 0.8–2.0% for n ≥ 1024, as P11 p
 - Strassen **exceeds γₙ** in 10 of its 11 recursive configurations: 1.0×10⁻¹³ to 1.3×10⁻¹¹, which is 24× to 7,400× worse than blocked. The one exception is n = 1024 with c = 128, at 0.93 γₙ.
 - Its Frobenius error stays within 1–19× of blocked's, and its normwise error is tiny.
 
-So Strassen meets the normwise guarantee it has, and breaks the componentwise one it doesn't have, just as §2.7 argued. The individual entries that suffer are the small ones, swamped by sums such as A₁₁ + A₂₂ that mix magnitudes. P14 is only partly right: the gap exceeds 1,000× at n = 128 but shrinks to 24–148× by n = 1024. Strassen's componentwise error *falls* with n here while blocked's rises slowly. We did not establish why (§6).
+Strassen meets the normwise guarantee it has and breaks the componentwise one it lacks, as §2.7 argued: small entries are swamped by sums such as A₁₁ + A₂₂ that mix magnitudes. P14 is only partly right: the gap exceeds 1,000× at n = 128 but shrinks to 24–148× by n = 1024. Strassen's componentwise error *falls* with n here while blocked's rises slowly. We did not establish why (§6).
 
 ## 4.7 Scorecard
 

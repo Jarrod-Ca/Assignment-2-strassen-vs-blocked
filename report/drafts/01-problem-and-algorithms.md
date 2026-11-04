@@ -49,10 +49,10 @@ The cross terms cancel: for example, $M_1 + M_4 - M_5 + M_7$ expands to exactly 
 
 **What makes it practical.** Three choices, each a runtime parameter that the experiments measure:
 
-1. **Cutoff.** Below size c the recursion stops and calls Algorithm A's kernel; recursing to 1 × 1 would be dominated by additions and call overhead. With d levels there are 7^d leaves, so the multiplication work is (7/8)^d of classical. At n = 4096 with c = 128 (d = 5) that is 51.3%, plus 1.1% in additions.
+1. **Cutoff.** Below size c the recursion stops and calls Algorithm A's kernel; recursing to 1 × 1 would be dominated by additions and call overhead. With d levels there are 7ᵈ leaves, so the multiplication work is (7/8)ᵈ of classical. At n = 4096 with c = 128 (d = 5) that is 51.3%, plus 1.1% in additions.
 2. **Padding.** Every level needs an even size, so n is zero-padded to some m ≥ n. Zero padding is exact. There are three rules:
    - `nextpow2`: the next power of two (1025 → 2048).
-   - `minimal`: m = s · 2^d, with d the fewest halvings that bring s = ⌈n/2^d⌉ to at most c (1025 → 1040 at c = 128).
+   - `minimal`: m = s · 2ᵈ, with d the fewest halvings that bring s = ⌈n/2ᵈ⌉ to at most c (1025 → 1040 at c = 128).
    - `aligned`: added after experiment E4 (§5.2). It rounds the leaf size s up to a multiple of 4 or 8.
 3. **Memory schedule.** Each node needs three (n/2)² temporaries. Three of the seven products are written straight into output quadrants, so each node needs only one quadrant copy. The workspace totals under n² doubles, about one extra matrix. A `Plan` allocates it, and any padded copies, before execution; the recursion never allocates.
 

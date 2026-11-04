@@ -29,7 +29,8 @@ scripts/                          analyse.py (summary tables, cost model, predic
                                   make_plots.py (all figures), mmdata.py (shared loading + cost model)
 results/                          raw CSVs, run_info.txt, runtimes.csv, tuned_params.txt
 figures/                          generated plots (fig1-fig10)
-report/            (phase 3, 6)   report drafts and final .docx
+report/                           drafts/*.md (the report source, incl. pre-registrations),
+                                  build_report.py, report.docx (generated)
 ```
 
 ## Requirements
@@ -233,3 +234,17 @@ experiments stay consistent with the tuning.
 Steps 3 and 4 need Python 3.9+ with `pandas`, `numpy`, `matplotlib` and `tabulate`
 (`pip install pandas numpy matplotlib tabulate`; Anaconda includes them). Both
 scripts read only the CSVs, so they run on any machine.
+
+## Building the report
+
+`report/drafts/*.md` is the report's source. Their git history shows that
+§2 and the E9 and E9b pre-registrations were committed before the
+measurements they predict. To regenerate the Word document:
+
+```
+python report/build_report.py      # needs pandoc 2.9+ and python-docx
+```
+
+This joins the drafts, embeds `figures/*.png` with their captions, renders
+`$...$` maths as native Word equations and writes `report/report.docx`.
+

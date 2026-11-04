@@ -12,12 +12,12 @@ Both algorithms run single-threaded. The benchmark thread is pinned to one logic
 
 ## 3.2 Inputs
 
-Inputs come from a portable xoshiro256\*\* generator, using only integer arithmetic and exact conversions; MSVC's and GCC's `<random>` distributions give different values from the same seed. A unit test checks hard-coded values on both compilers. Seeds depend only on n, so **every experiment and every algorithm at a given size multiplies the same matrices**. There are three input families:
+Inputs come from a portable xoshiro256\*\* generator (Blackman & Vigna, 2021), using only integer arithmetic and exact conversions; MSVC's and GCC's `<random>` distributions give different values from the same seed. A unit test checks hard-coded values on both compilers. Seeds depend only on n, so **every experiment and every algorithm at a given size multiplies the same matrices**. There are three input families:
 - **`uniform`** U[−1, 1): used for all timings. The values have no denormals or special cases, so time reflects the algorithm alone.
 - **`smallint`**, integers in [−8, 8]: every partial sum is exact in double precision, so both algorithms must match the reference bit for bit.
-- **`widerange`**, ±m·2^e with e ∈ [−20, 20]: built to expose Strassen's normwise (rather than componentwise) error bound (§2.7).
+- **`widerange`**, ±m·2ᵉ with e ∈ [−20, 20]: built to expose Strassen's normwise (rather than componentwise) error bound (§2.7).
 
-Errors are measured against a double-double reference: about 106-bit accumulation, using exact FMA products and TwoSum.
+Errors are measured against a double-double reference: about 106-bit accumulation, using exact FMA products and TwoSum (Knuth, 1997).
 
 ## 3.3 Experiments
 
@@ -29,7 +29,7 @@ Each experiment targets specific predictions from §2 (P1–P14):
 | E1 | tile T ∈ {1, 8, …, 256, untiled}, n ∈ {256, 1000, 2000} | P1, P6; selects the tile |
 | E2 | cutoff c ∈ {16, …, 512}, n ∈ {512, …, 4096} | P2, P3; selects the cutoff |
 | E3 | 23 sizes, n = 64–4096 | P1, P4, P5 |
-| E4 | `minimal` vs `nextpow2` at 2^k − 1, 2^k, 2^k + 1 (k = 9–11), plus n = 1000–1100 in steps of 4 | P9, P10 |
+| E4 | `minimal` vs `nextpow2` at 2ᵏ − 1, 2ᵏ, 2ᵏ + 1 (k = 9–11), plus n = 1000–1100 in steps of 4 | P9, P10 |
 | E5 | packed vs row stride n + 8 vs size n + 8, at n = 512, 1024, 2048 | P8 |
 | E6 | antagonist occupying 0 / 1 / 32 / 64 / 80 MB of L3, n ∈ {1000, 2000, 3000} | P7 |
 | E7 | reused `Plan` vs allocating on every call, n = 128–4096 | P11 |
@@ -38,7 +38,7 @@ Each experiment targets specific predictions from §2 (P1–P14):
 
 **Tuning parameters are measured, not chosen.** E1 picks the tile and E2 the cutoff by a fixed rule. For each configuration, every candidate's median is divided by the best median in that configuration; the winner has the smallest geometric mean of those ratios across configurations. Later experiments read the winners from `results/tuned_params.txt`: **T = 128** and **c = 128**.
 
-E6's antagonist is a thread pinned to a *different physical core*. It repeatedly reads one double per cache line of a private buffer, so it shares only the L3 with the benchmark. Its **1 MB control** fits in the antagonist's own L2. That separates "a neighbouring core is busy", which can lower the boost clock, from "part of L3 is occupied".
+E6's antagonist is a thread on a *different physical core* that reads one double per cache line of a private buffer, sharing only the L3. Its **1 MB control** fits in its own L2, separating "a neighbouring core is busy" (which can lower the boost clock) from "part of L3 is occupied".
 
 ## 3.4 Timing
 
@@ -54,7 +54,7 @@ The harness keeps the PA1 harness's design rules. Its `mm_bench` executable runs
 
 ## 3.5 Machine state, and what a shakedown run taught us
 
-A first complete run (archived in `results/shakedown_2026-11-04/`) went wrong because a game was started on the machine partway through it. The same blocked multiplication fell from 26.0 to 21.8 GFLOP/s between E3 and E7. That exposed a design flaw: E6 had measured every 0 MB configuration first and every 80 MB configuration last, so drift was indistinguishable from cache pressure. Two changes followed:
+A first full run (archived in `results/shakedown_2026-11-04/`) was spoiled by a game started partway through: the same blocked multiplication fell from 26.0 to 21.8 GFLOP/s between E3 and E7. It also exposed a design flaw. E6 had measured every 0 MB configuration first and every 80 MB one last, so drift was indistinguishable from cache pressure. Two changes followed:
 1. **Round-robin execution for E5 and E6.**
 2. **A drift monitor.** Before every configuration, it times a fixed workload (blocked, n = 384, T = 64) and writes the reading to each row.
 
