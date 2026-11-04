@@ -198,8 +198,10 @@ std::vector<Config> plan_for(const Settings& s, const std::string& id) {
             add({"n+" + std::to_string(s.e5_pad), n + s.e5_pad, 0, 0, s.reps, v});
         }
     } else if (id == "E6") {
-        for (std::size_t mb : s.e6_mb)
-            for (std::size_t n : s.e6_sizes)
+        // n outer, pressure level inner: with round-robin execution (see run_experiment)
+        // every pressure level of one size is measured within seconds of the others.
+        for (std::size_t n : s.e6_sizes)
+            for (std::size_t mb : s.e6_mb)
                 add({"pressure_" + std::to_string(mb) + "MB", n, 0, mb, s.reps, {blocked_spec(), strassen_spec()}});
     } else if (id == "E7") {
         for (std::size_t n : s.e7_sizes) {
@@ -247,15 +249,21 @@ double estimate_call(const Context& ctx, const VariantSpec& v, std::size_t n) {
     return (static_cast<double>(st.base_flops) + 8.0 * static_cast<double>(st.add_flops + st.copy_elems)) / rate;
 }
 
-double estimate_plan(const Context& ctx, const std::vector<Config>& plan) {
+constexpr double kReferenceSeconds = 0.05;  // drift-monitor workload length
+
+bool interleaved(const std::string& id) { return id == "E5" || id == "E6"; }
+
+double estimate_plan(const Context& ctx, const std::vector<Config>& plan, bool rounds) {
     double total = 0.0;
     for (const Config& c : plan) {
-        if (c.antagonist_mb) total += 0.05 + 3.0 * static_cast<double>(c.antagonist_mb) / 20000.0;
+        const int setups = rounds ? c.reps : 1;  // round-robin re-creates the configuration every round
+        double per_setup = kReferenceSeconds + 0.01 + 1e-8 * static_cast<double>(c.n) * c.n;
+        if (c.antagonist_mb) per_setup += 0.05 + 3.0 * static_cast<double>(c.antagonist_mb) / 20000.0;
+        total += setups * per_setup;
         for (const VariantSpec& v : c.variants) {
             const double t = estimate_call(ctx, v, c.n);
-            total += t + c.reps * std::max(t, ctx.s.min_sample_s);
+            total += setups * t + c.reps * std::max(t, ctx.s.min_sample_s);
         }
-        total += 1e-8 * static_cast<double>(c.n) * c.n;  // input generation
     }
     return total;
 }
@@ -291,18 +299,51 @@ const std::vector<std::string> kTimingHeader{
     "experiment", "tag",      "algorithm",     "variant",       "n",        "stride",     "padded_n",
     "depth",      "tile",     "cutoff",        "padding",       "temp_pad", "alloc",      "antagonist_mb",
     "antagonist_pinned",      "family",        "seed",          "rep",      "order",      "inner_calls",
-    "seconds",    "eff_gflops", "actual_gflops", "checksum",    "rel_diff_vs_first"};
+    "seconds",    "eff_gflops", "actual_gflops", "checksum",    "rel_diff_vs_first", "ref_gflops"};
 
 struct ConfigResult {
     Config cfg;
     std::vector<std::string> labels;          // "algorithm:variant"
-    std::vector<double> medians;
+    std::vector<double> medians;              // filled by finalize()
     std::vector<std::vector<double>> times;   // per-repetition seconds, in repetition order
+    std::vector<double> ref_gflops;           // drift-monitor readings taken for this configuration
 };
 
-ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg, CsvWriter& csv) {
+void finalize(ConfigResult& r) {
+    r.medians.clear();
+    for (const auto& t : r.times) r.medians.push_back(median(t));
+}
+
+void print_result(std::ostream& log, const ConfigResult& r, double baseline) {
+    std::ostringstream head;
+    head << "  " << std::left << std::setw(16) << r.cfg.tag << " n=" << r.cfg.n;
+    if (r.cfg.stride) head << "  stride=" << r.cfg.stride;
+    if (r.cfg.antagonist_mb) head << "  antagonist=" << r.cfg.antagonist_mb << " MB";
+    if (!r.ref_gflops.empty()) {
+        const double ref = median(r.ref_gflops);
+        head << "   [ref " << std::fixed << std::setprecision(2) << ref << " GFLOP/s, " << std::showpos
+             << std::setprecision(1) << 100.0 * (ref / baseline - 1.0) << "% vs run start]";
+    }
+    log << head.str() << "\n";
+    for (std::size_t i = 0; i < r.labels.size(); ++i) {
+        const auto colon = r.labels[i].find(':');
+        std::ostringstream line;  // format locally so no stream state leaks into the log
+        line << "      " << std::left << std::setw(9) << r.labels[i].substr(0, colon) << std::setw(28)
+             << r.labels[i].substr(colon + 1) << std::right << std::setw(12) << format_time(r.medians[i]) << "  "
+             << std::fixed << std::setprecision(2) << std::setw(7)
+             << 2.0 * cube(r.cfg.n) / r.medians[i] / 1e9 << " eff GFLOP/s";
+        log << line.str() << "\n";
+    }
+}
+
+// Runs one configuration: `cfg.reps` interleaved repetitions of every variant.
+// `rep_offset` numbers the rows when round-robin execution calls this once per round.
+ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg, CsvWriter& csv, int rep_offset = 0) {
     std::ostream& log = *ctx.log;
     const std::size_t n = cfg.n;
+
+    // Drift monitor first, with no antagonist running.
+    const double ref_gflops = measure_reference(ctx);
 
     CachePressure pressure(cfg.antagonist_mb << 20, ctx.s.antagonist_cpu);
     if (pressure.active() && !pressure.pinned())
@@ -318,8 +359,12 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
         L->spec = spec;
         L->C = Matrix(n, n, cfg.stride);
         Live* l = L.get();
+        // Make "tuned" labels self-describing and unique per algorithm, e.g.
+        // "tuned_T=192" / "tuned_c=128+nextpow2".
+        const bool tuned_label = spec.label.rfind("tuned", 0) == 0;
         if (spec.algorithm == "blocked") {
             l->tile = resolve_tile(ctx, spec.tile);
+            if (tuned_label) l->spec.label = "tuned_T=" + std::to_string(l->tile) + spec.label.substr(5);
             l->padded_n = n;
             l->flops = 2.0 * cube(n);
             const blocked::Params bp{l->tile};
@@ -329,6 +374,7 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
             const strassen::Stats st = strassen::predict(n, p);
             l->tile = p.base.tile;
             l->cutoff = p.cutoff;
+            if (tuned_label) l->spec.label = "tuned_c=" + std::to_string(l->cutoff) + spec.label.substr(5);
             l->padded_n = st.padded_n;
             l->depth = st.depth;
             l->flops = static_cast<double>(st.total_flops());
@@ -378,36 +424,24 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
                      pressure.active() ? (pressure.pinned() ? "1" : "0") : "",
                      "uniform",
                      std::to_string(sa),
-                     std::to_string(rep),
+                     std::to_string(rep_offset + rep),
                      std::to_string(k),
                      std::to_string(l.inner),
                      fmt(seconds),
                      fmt(2.0 * cube(n) / seconds / 1e9),
                      fmt(l.flops / seconds / 1e9),
                      fmt(sum),
-                     fmt(l.rel_diff)});
+                     fmt(l.rel_diff),
+                     fmt(ref_gflops)});
         }
     }
 
-    ConfigResult result{cfg, {}, {}, {}};
-    {
-        std::ostringstream line;
-        line << "  " << std::left << std::setw(16) << cfg.tag << " n=" << n;
-        if (cfg.stride) line << "  stride=" << cfg.stride;
-        if (cfg.antagonist_mb) line << "  antagonist=" << cfg.antagonist_mb << " MB";
-        log << line.str() << "\n";
-    }
+    ConfigResult result{cfg, {}, {}, {}, {ref_gflops}};
     for (auto& l : lives) {
-        const double med = median(l->times);
         result.labels.push_back(l->spec.algorithm + ":" + l->spec.label);
-        result.medians.push_back(med);
         result.times.push_back(l->times);
-        std::ostringstream line;  // format locally so no stream state leaks into the log
-        line << "      " << std::left << std::setw(9) << l->spec.algorithm << std::setw(26) << l->spec.label
-             << std::right << std::setw(12) << format_time(med) << "  " << std::fixed << std::setprecision(2)
-             << std::setw(7) << 2.0 * cube(n) / med / 1e9 << " eff GFLOP/s";
-        log << line.str() << "\n";
     }
+    finalize(result);
     return result;
 }
 
@@ -495,10 +529,11 @@ void run_e8(Context& ctx, const std::string& path) {
                              std::to_string(padded), std::to_string(depth), std::to_string(base),
                              fmt(mm::relative_error_fro(C, ref)), fmt(max_abs),
                              fmt(norm_ab > 0 ? max_abs / norm_ab : 0.0), fmt(mm::max_componentwise_ratio(C, ref, D)),
-                             fmt(mm::max_entrywise_relative_error(C, ref)), fmt(gamma_n), fmt(higham)});
+                             fmt(mm::max_entrywise_relative_error(C, ref)), fmt(gamma_n),
+                             higham >= 0.0 ? fmt(higham) : "n/a"});  // Higham's bound is Strassen-specific
                 };
                 blocked::multiply(A, B, C, {ctx.tuned.tile});
-                record("blocked", "tuned", 0, n, 0, n, 0.0);
+                record("blocked", "tuned_T=" + std::to_string(ctx.tuned.tile), 0, n, 0, n, -1.0);
                 for (std::size_t cut : s.e8_cutoffs) {
                     strassen::Params p;
                     p.cutoff = cut;
@@ -591,7 +626,51 @@ Calibration calibrate() {
 
 double estimate_seconds(const Context& ctx, const std::string& id) {
     if (id == "E8") return estimate_e8(ctx);
-    return estimate_plan(ctx, plan_for(ctx.s, id));
+    return estimate_plan(ctx, plan_for(ctx.s, id), interleaved(id));
+}
+
+namespace {
+double time_reference(Context& ctx) {
+    const std::size_t n = 384;
+    if (ctx.ref_A.rows() != n) {
+        ctx.ref_A = mm::make_uniform(n, n, mm::derive_seed(ctx.s.base_seed, 999001));
+        ctx.ref_B = mm::make_uniform(n, n, mm::derive_seed(ctx.s.base_seed, 999002));
+        ctx.ref_C = Matrix(n, n);
+    }
+    const blocked::Params p{64};
+    blocked::multiply(ctx.ref_A, ctx.ref_B, ctx.ref_C, p);  // warm
+    int calls = 0;
+    const double t0 = now_seconds();
+    double t = 0.0;
+    do {
+        blocked::multiply(ctx.ref_A, ctx.ref_B, ctx.ref_C, p);
+        ++calls;
+        t = now_seconds() - t0;
+    } while (t < kReferenceSeconds);
+    return calls * 2.0 * cube(n) / t / 1e9;
+}
+}  // namespace
+
+void establish_reference_baseline(Context& ctx) {
+    std::vector<double> readings;
+    for (int i = 0; i < 8; ++i) readings.push_back(time_reference(ctx));  // ~0.4 s
+    ctx.ref_baseline_gflops = median(std::vector<double>(readings.begin() + 3, readings.end()));
+}
+
+double measure_reference(Context& ctx) {
+    const double gflops = time_reference(ctx);
+    if (ctx.ref_baseline_gflops == 0.0) establish_reference_baseline(ctx);
+    if (ctx.exp_ref_max == 0.0) ctx.exp_ref_min = ctx.exp_ref_max = gflops;
+    ctx.exp_ref_min = std::min(ctx.exp_ref_min, gflops);
+    ctx.exp_ref_max = std::max(ctx.exp_ref_max, gflops);
+    const double dev = gflops / ctx.ref_baseline_gflops - 1.0;
+    if (std::fabs(dev) > kDriftWarnFraction) {
+        std::ostringstream w;
+        w << std::fixed << std::setprecision(1) << "    WARNING: drift monitor reads " << gflops << " GFLOP/s, "
+          << std::showpos << 100.0 * dev << "% vs run start - is something else using the machine?";
+        *ctx.log << w.str() << "\n";
+    }
+    return gflops;
 }
 
 void run_experiment(Context& ctx, const std::string& id) {
@@ -606,10 +685,51 @@ void run_experiment(Context& ctx, const std::string& id) {
         return;
     }
     CsvWriter csv(path, kTimingHeader);
-    std::vector<ConfigResult> results;
-    for (const Config& cfg : plan_for(ctx.s, id)) results.push_back(run_config(ctx, id, cfg, csv));
-
     std::ostream& log = *ctx.log;
+    const std::vector<Config> plan = plan_for(ctx.s, id);
+    std::vector<ConfigResult> results;
+    if (!interleaved(id)) {
+        for (const Config& cfg : plan) {
+            results.push_back(run_config(ctx, id, cfg, csv));
+            print_result(log, results.back(), ctx.ref_baseline_gflops);
+        }
+    } else {
+        // Round-robin: E5 and E6 draw their conclusions from comparisons *between*
+        // configurations (stride vs stride, pressure level vs pressure level), which
+        // sequential execution would confound with slow drift. Each round runs one
+        // repetition of every configuration; the order is rotated every round and
+        // reversed on odd rounds, so no configuration is systematically early or late.
+        int rounds = 0;
+        for (const Config& c : plan) rounds = std::max(rounds, c.reps);
+        const std::size_t P = plan.size();
+        results.resize(P);
+        log << "  round-robin: " << rounds << " rounds x " << P << " configurations\n";
+        for (int r = 0; r < rounds; ++r) {
+            for (std::size_t k = 0; k < P; ++k) {
+                const std::size_t rot = (k + static_cast<std::size_t>(r)) % P;
+                const std::size_t idx = r % 2 ? P - 1 - rot : rot;
+                if (r >= plan[idx].reps) continue;
+                Config one = plan[idx];
+                one.reps = 1;
+                ConfigResult cr = run_config(ctx, id, one, csv, r);
+                ConfigResult& acc = results[idx];
+                if (acc.labels.empty()) {
+                    acc = cr;
+                    acc.cfg = plan[idx];
+                } else {
+                    for (std::size_t i = 0; i < cr.times.size(); ++i)
+                        acc.times[i].insert(acc.times[i].end(), cr.times[i].begin(), cr.times[i].end());
+                    acc.ref_gflops.insert(acc.ref_gflops.end(), cr.ref_gflops.begin(), cr.ref_gflops.end());
+                }
+            }
+            log << "  round " << r + 1 << "/" << rounds << " done\n";
+        }
+        for (auto& r : results) {
+            finalize(r);
+            print_result(log, r, ctx.ref_baseline_gflops);
+        }
+    }
+
     if (id == "E0") {
         // Variance summary: coefficient of variation per variant, and drift (first vs last fifth).
         log << "  pilot summary (coefficient of variation = stdev / mean):\n";

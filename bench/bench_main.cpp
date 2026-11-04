@@ -67,7 +67,9 @@ void write_run_header(std::ostream& o, const bench::Context& ctx, const std::vec
       << "\npilot_reps: " << s.pilot_reps << "\nmin_sample_s: " << s.min_sample_s << "\nbase_seed: " << s.base_seed
       << "\nskip_large: " << (s.skip_large ? "yes" : "no")
       << "\ncalibration: blocked " << ctx.cal.blocked_flops_per_s / 1e9 << " GFLOP/s, dd reference "
-      << ctx.cal.dd_seconds_per_n3 * 1e9 << " ns per n^3\n";
+      << ctx.cal.dd_seconds_per_n3 * 1e9 << " ns per n^3"
+      << "\ndrift_monitor_baseline: " << ctx.ref_baseline_gflops << " GFLOP/s (blocked n=384 T=64; warn at +/-"
+      << 100 * bench::kDriftWarnFraction << "%)\n";
 }
 
 }  // namespace
@@ -144,6 +146,7 @@ int main(int argc, char** argv) {
     log << "Capturing environment and calibrating...\n";
     ctx.env = bench::capture_environment();
     ctx.cal = bench::calibrate();
+    bench::establish_reference_baseline(ctx);  // drift-monitor baseline for this run
     std::filesystem::create_directories(s.results_dir);
     ctx.tuned = bench::load_tuned(s.results_dir);
     if (tile) { ctx.tuned.tile = tile; ctx.tuned.tile_source = "--tile override"; }
@@ -188,9 +191,10 @@ int main(int argc, char** argv) {
     }
     const bool new_runtimes = !std::filesystem::exists(dir / "runtimes.csv");
     std::ofstream runtimes(dir / "runtimes.csv", std::ios::app);
-    if (new_runtimes) runtimes << "finished_at,git_commit,mode,experiment,estimated_s,actual_s\n";
+    if (new_runtimes)
+        runtimes << "finished_at,git_commit,mode,experiment,estimated_s,actual_s,ref_gflops_min,ref_gflops_max\n";
 
-    std::vector<double> actual;
+    std::vector<double> actual, ref_min, ref_max;
     const double run_start = bench::now_seconds();
     try {
         for (std::size_t i = 0; i < ids.size(); ++i) {
@@ -198,12 +202,17 @@ int main(int argc, char** argv) {
                                              [&](const bench::ExperimentInfo& e) { return e.id == ids[i]; });
             log << "[" << ids[i] << "] " << info.title << "  (estimated " << bench::format_duration(est[i]) << ")\n";
             const double t0 = bench::now_seconds();
+            ctx.exp_ref_min = ctx.exp_ref_max = 0.0;
             bench::run_experiment(ctx, ids[i]);
             actual.push_back(bench::now_seconds() - t0);
             log << "[" << ids[i] << "] finished in " << bench::format_duration(actual.back()) << " (estimated "
                 << bench::format_duration(est[i]) << ")\n\n";
+            ref_min.push_back(ctx.exp_ref_min);
+            ref_max.push_back(ctx.exp_ref_max);
             runtimes << bench::timestamp() << "," << ctx.env.git_commit << "," << ctx.mode() << "," << ids[i] << ","
-                     << est[i] << "," << actual.back() << std::endl;
+                     << est[i] << "," << actual.back() << ","
+                     << (ref_max.back() > 0 ? std::to_string(ref_min.back()) : "") << ","
+                     << (ref_max.back() > 0 ? std::to_string(ref_max.back()) : "") << std::endl;
         }
     } catch (const std::exception& e) {
         log << "ERROR: " << e.what() << "\n";
@@ -215,10 +224,19 @@ int main(int argc, char** argv) {
     std::ostringstream summary;
     summary << "tuned_tile: " << ctx.tuned.tile << " (" << ctx.tuned.tile_source << ")\n"
             << "tuned_cutoff: " << ctx.tuned.cutoff << " (" << ctx.tuned.cutoff_source << ")\n"
-            << "runtime per experiment (actual / estimated):\n";
-    for (std::size_t i = 0; i < actual.size(); ++i)
+            << "runtime per experiment (actual / estimated)   drift monitor range (GFLOP/s, % of baseline):\n";
+    for (std::size_t i = 0; i < actual.size(); ++i) {
         summary << "  " << ids[i] << "  " << std::setw(10) << bench::format_duration(actual[i]) << " / "
-                << bench::format_duration(est[i]) << "\n";
+                << std::left << std::setw(10) << bench::format_duration(est[i]) << std::right;
+        if (ref_max[i] > 0) {
+            std::ostringstream r;
+            r << std::fixed << std::setprecision(2) << ref_min[i] << " - " << ref_max[i] << "  ("
+              << std::setprecision(1) << 100 * ref_min[i] / ctx.ref_baseline_gflops << "% - "
+              << 100 * ref_max[i] / ctx.ref_baseline_gflops << "%)";
+            summary << "   " << r.str();
+        }
+        summary << "\n";
+    }
     summary << "  total " << bench::format_duration(total) << " / " << bench::format_duration(est_total) << "\n"
             << "==== run finished " << bench::timestamp() << " ====\n\n";
     info << summary.str();

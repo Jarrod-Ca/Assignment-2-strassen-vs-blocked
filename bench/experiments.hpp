@@ -94,7 +94,24 @@ struct Context {
     Tuned tuned;
     std::ostream* log;
     std::string mode() const { return s.quick ? "quick" : "full"; }
+
+    // Drift monitor: a fixed reference workload timed before every configuration.
+    mm::Matrix ref_A, ref_B, ref_C;
+    double ref_baseline_gflops = 0.0;           // first measurement of the run
+    double exp_ref_min = 0.0, exp_ref_max = 0.0;  // range within the current experiment
 };
+
+// Drift monitor. Times a fixed workload (blocked, n = 384, T = 64, looped to at
+// least 50 ms) and returns its GFLOP/s. The first call of a run sets the
+// baseline; any later reading more than 5% away from it is reported as a
+// warning. Every timing row records the reading taken just before its
+// configuration, so drift in machine state (thermal, background load) is
+// measured rather than assumed absent.
+double measure_reference(Context& ctx);
+// Sets the baseline from a warmed-up machine: discards the first readings
+// (clock ramp-up, first-touch page faults) and takes the median of the rest.
+void establish_reference_baseline(Context& ctx);
+constexpr double kDriftWarnFraction = 0.05;
 
 struct ExperimentInfo {
     std::string id, title, csv;
