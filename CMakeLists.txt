@@ -24,10 +24,14 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(mm_flags INTERFACE)
 if(MSVC)
-  target_compile_options(mm_flags INTERFACE /W4 /permissive- /EHsc /fp:precise /arch:AVX2)
+  set(MM_FLAGS /W4 /permissive- /EHsc /fp:precise /arch:AVX2)
 else()
-  target_compile_options(mm_flags INTERFACE -Wall -Wextra -Wpedantic -mavx2 -mfma -ffp-contract=off)
+  set(MM_FLAGS -Wall -Wextra -Wpedantic -mavx2 -mfma -ffp-contract=off)
 endif()
+target_compile_options(mm_flags INTERFACE ${MM_FLAGS})
+# Recorded verbatim in every results/run_info.txt.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" MM_BUILD_TYPE_UPPER)
+string(JOIN " " MM_FLAGS_STR ${MM_FLAGS} ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${MM_BUILD_TYPE_UPPER}})
 
 # Shared infrastructure: storage, generators, comparison, reference oracle.
 add_library(mm_common STATIC
@@ -62,3 +66,16 @@ add_executable(mm_tests
   tests/test_strassen.cpp)
 target_link_libraries(mm_tests PRIVATE mm_common mm_blocked mm_strassen)
 add_test(NAME mm_tests COMMAND mm_tests)
+
+# ---------------------------------------------------------------------------
+# Benchmark harness
+# ---------------------------------------------------------------------------
+find_package(Threads REQUIRED)
+configure_file(bench/build_info.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/generated/build_info.hpp @ONLY)
+add_executable(mm_bench
+  bench/bench_main.cpp
+  bench/experiments.cpp
+  bench/environment.cpp
+  bench/cache_pressure.cpp)
+target_include_directories(mm_bench PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated bench)
+target_link_libraries(mm_bench PRIVATE mm_strassen Threads::Threads)
