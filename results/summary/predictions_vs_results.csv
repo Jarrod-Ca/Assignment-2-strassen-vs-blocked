@@ -10,6 +10,7 @@ P7b,Strassen speedup falls by at most 4.1% at 80 MB; 1 MB control changes times 
 P8,"blocked GFLOP/s gain from padding the stride: n=512: +4.7%, n=1024: +3.4%, n=2048: +0.9%",refuted
 P9,"jumps 6.80x, 7.13x, 7.25x; vs blocked at 2^k+1: 3.42x, 2.95x, 3.77x",supported
 P10,minimal padding Strassen/blocked 0.71–1.10 over 1000–1100 (slower than blocked at 14/26 sizes),refuted at some sizes
+P10-E9,minimal slower than blocked at 17/35 sizes; aligned4 at 3/35; aligned8 at 14/35,alignment explanation supported
 P11,"overhead n<=256: 0.5%, 2.0%; n>=1024: 2.0%, 1.2%, 0.8%",partly supported
 P12,smallint max error 0.0e+00,supported
 P13,uniform Strassen/blocked Frobenius error ratio 1.0–17.0x; max 1.8e-14,supported
