@@ -296,23 +296,48 @@ Dense sweep 1000–1100, minimal padding: Strassen/blocked 0.715–1.098; slower
 Minimal padding, leaf a multiple of 4: median ratio 0.778 (8 sizes); otherwise 1.033 (27 sizes).
 
 
+## E9b follow-up: alloc2 / alloc1 for two identical aligned-4 variants (paired by repetition)
+
+Order A runs alloc2 right after alloc1 (aligned8's slot in E9); order B runs alloc1 right after alloc2.
+
+|    |    n | tag     |   ratio |   ci_lo |   ci_hi |   reps | padded_copies   |
+|---:|-----:|:--------|--------:|--------:|--------:|-------:|:----------------|
+|  0 | 1000 | order_A |  0.9763 |  0.9669 |  1.0029 |     15 | True            |
+|  1 | 1000 | order_B |  1.0306 |  1.0111 |  1.0427 |     15 | True            |
+|  2 | 1012 | order_A |  0.9658 |  0.9598 |  1.0002 |     15 | True            |
+|  3 | 1012 | order_B |  1.0394 |  1.0050 |  1.0438 |     15 | True            |
+|  4 | 1016 | order_A |  0.9779 |  0.9635 |  0.9964 |     15 | True            |
+|  5 | 1016 | order_B |  1.0248 |  1.0037 |  1.0367 |     15 | True            |
+|  6 | 1024 | order_A |  0.9969 |  0.9911 |  1.0011 |     15 | False           |
+|  7 | 1024 | order_B |  0.9994 |  0.9937 |  1.0030 |     15 | False           |
+|  8 | 1092 | order_A |  0.9710 |  0.9664 |  1.0008 |     15 | True            |
+|  9 | 1092 | order_B |  1.0351 |  1.0072 |  1.0393 |     15 | True            |
+| 10 | 1100 | order_A |  0.9497 |  0.9365 |  0.9731 |     15 | True            |
+| 11 | 1100 | order_B |  1.0354 |  1.0022 |  1.0403 |     15 | True            |
+
+Sizes with padded copies: carry-over pattern at 2, placement pattern at 0, no significant difference at 0 (of 5). Control (no padded copies): ratios order_A 0.997 [0.991, 1.001], order_B 0.999 [0.994, 1.003]. Verdict: carry-over (position) effect.
+
+Direction of the point estimates: the variant running second of the two is faster in both orders at 5 of 5 sizes (both CIs exclude 1 at 2).
+
+
 ## Predictions (report §2.8) vs results
 
-| prediction   | measured                                                                                       | verdict                            |
-|:-------------|:-----------------------------------------------------------------------------------------------|:-----------------------------------|
-| P1           | blocked 24.8–29.3 GFLOP/s for n >= 256                                                         | refuted (faster than predicted)    |
-| P2           | c*=128; neighbours within one power of two are up to 12.8% slower                              | supported; flatness (±10%) refuted |
-| P3           | best per n: c=128, c=128, c=128, c=128                                                         | supported                          |
-| P4           | first win n=96 (ratio 0.999); sustained >=3% from n=160; ratio at 256: 0.911                   | supported                          |
-| P5           | speedup at 4096 = 1.98x                                                                        | exceeded                           |
-| P6           | tuned T=128; best per n: T=128, T=128, T=192; T=64 is 16.7% slower at worst                    | refuted                            |
-| P7a          | blocked at 4096 is 84.6% of its peak (29.3); at 2048 85.3%                                     | refuted                            |
-| P7b          | Strassen speedup falls by at most 4.1% at 80 MB; 1 MB control changes times by <= 0.6%         | supported                          |
-| P8           | blocked GFLOP/s gain from padding the stride: n=512: +4.7%, n=1024: +3.4%, n=2048: +0.9%       | refuted                            |
-| P9           | jumps 6.80x, 7.13x, 7.25x; vs blocked at 2^k+1: 3.42x, 2.95x, 3.77x                            | supported                          |
-| P10          | minimal padding Strassen/blocked 0.71–1.10 over 1000–1100 (slower than blocked at 14/26 sizes) | refuted at some sizes              |
-| P10-E9       | minimal slower than blocked at 17/35 sizes; aligned4 at 3/35; aligned8 at 14/35                | alignment explanation supported    |
-| P11          | overhead n<=256: 0.5%, 2.0%; n>=1024: 2.0%, 1.2%, 0.8%                                         | partly supported                   |
-| P12          | smallint max error 0.0e+00                                                                     | supported                          |
-| P13          | uniform Strassen/blocked Frobenius error ratio 1.0–17.0x; max 1.8e-14                          | supported                          |
-| P14          | widerange componentwise ratio at depth>=3: 24–5861x; Frobenius ratio 1.0–19.2x                 | partly supported                   |
+| prediction   | measured                                                                                                                                   | verdict                            |
+|:-------------|:-------------------------------------------------------------------------------------------------------------------------------------------|:-----------------------------------|
+| P1           | blocked 24.8–29.3 GFLOP/s for n >= 256                                                                                                     | refuted (faster than predicted)    |
+| P2           | c*=128; neighbours within one power of two are up to 12.8% slower                                                                          | supported; flatness (±10%) refuted |
+| P3           | best per n: c=128, c=128, c=128, c=128                                                                                                     | supported                          |
+| P4           | first win n=96 (ratio 0.999); sustained >=3% from n=160; ratio at 256: 0.911                                                               | supported                          |
+| P5           | speedup at 4096 = 1.98x                                                                                                                    | exceeded                           |
+| P6           | tuned T=128; best per n: T=128, T=128, T=192; T=64 is 16.7% slower at worst                                                                | refuted                            |
+| P7a          | blocked at 4096 is 84.6% of its peak (29.3); at 2048 85.3%                                                                                 | refuted                            |
+| P7b          | Strassen speedup falls by at most 4.1% at 80 MB; 1 MB control changes times by <= 0.6%                                                     | supported                          |
+| P8           | blocked GFLOP/s gain from padding the stride: n=512: +4.7%, n=1024: +3.4%, n=2048: +0.9%                                                   | refuted                            |
+| P9           | jumps 6.80x, 7.13x, 7.25x; vs blocked at 2^k+1: 3.42x, 2.95x, 3.77x                                                                        | supported                          |
+| P10          | minimal padding Strassen/blocked 0.71–1.10 over 1000–1100 (slower than blocked at 14/26 sizes)                                             | refuted at some sizes              |
+| P10-E9       | minimal slower than blocked at 17/35 sizes; aligned4 at 3/35; aligned8 at 14/35                                                            | alignment explanation supported    |
+| P11          | overhead n<=256: 0.5%, 2.0%; n>=1024: 2.0%, 1.2%, 0.8%                                                                                     | partly supported                   |
+| P12          | smallint max error 0.0e+00                                                                                                                 | supported                          |
+| P13          | uniform Strassen/blocked Frobenius error ratio 1.0–17.0x; max 1.8e-14                                                                      | supported                          |
+| P14          | widerange componentwise ratio at depth>=3: 24–5861x; Frobenius ratio 1.0–19.2x                                                             | partly supported                   |
+| E9b          | follower faster in both orders at 5/5 sizes (CI-significant in both at 2); placement pattern 0/5; median |ratio-1| with padded copies 3.2% | carry-over (position) effect       |

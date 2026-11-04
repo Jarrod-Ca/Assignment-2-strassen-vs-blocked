@@ -332,7 +332,13 @@ def main() -> None:
                      f"no significant difference at {none_} (of {len(a)}). Control (no padded copies): ratios "
                      + ", ".join(f"{r.tag} {r.ratio:.3f} [{r.ci_lo:.3f}, {r.ci_hi:.3f}]" for r in ctrl.itertuples())
                      + f". Verdict: {verdict}.\n")
-        P["E9b"] = (f"carry-over pattern {carry}/{len(a)}, placement {place}/{len(a)}, none {none_}/{len(a)}; "
+        ra = test[test.tag == "order_A"].set_index("n")["ratio"]
+        rb = test[test.tag == "order_B"].set_index("n")["ratio"]
+        direction = int(((ra < 1) & (rb > 1)).sum())  # point estimates: the follower is faster in both orders
+        lines.append(f"Direction of the point estimates: the variant running second of the two is faster in both "
+                     f"orders at {direction} of {len(ra)} sizes (both CIs exclude 1 at {carry}).\n")
+        P["E9b"] = (f"follower faster in both orders at {direction}/{len(ra)} sizes (CI-significant in both at {carry}); "
+                    f"placement pattern {place}/{len(a)}; "
                     f"median |ratio-1| with padded copies {(test.ratio - 1).abs().median() * 100:.1f}%", verdict)
 
     # ---------------- predictions table

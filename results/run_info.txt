@@ -112,3 +112,33 @@ runtime per experiment (actual / estimated)   drift monitor range (GFLOP/s, % of
   total 3m 55s / 3m 58s
 ==== run finished 2026-11-04 16:43:03 ====
 
+==== run started 2026-11-04 16:55:00 ====
+mode: full
+experiments: E9b
+cpu: AMD Ryzen 7 7800X3D 8-Core Processor
+logical_cpus: 16
+os: Microsoft Windows [Version 10.0.26200.9711]
+ram_gb: 31.1
+compiler: MSVC 19.51.36260.0
+build: Release (NDEBUG)
+flags: /W4 /permissive- /EHsc /fp:precise /arch:AVX2 /DWIN32 /D_WINDOWS /EHsc /O2 /Ob2 /DNDEBUG
+git_commit: ffb7a43
+power_plan: Ultimate Performance
+timer: steady_clock tick 1 ns, resolution 100 ns, overhead 16.4 ns/call
+bench_cpu: 2 (pinned)
+antagonist_cpu: 6
+priority: process HIGH_PRIORITY_CLASS ok, thread HIGHEST ok
+reps: 7
+pilot_reps: 30
+min_sample_s: 0.02
+base_seed: 20261104
+skip_large: no
+calibration: blocked 25.4887 GFLOP/s, dd reference 4.27561 ns per n^3
+drift_monitor_baseline: 25.3966 GFLOP/s (blocked n=384 T=64; warn at +/-5%)
+tuned_tile: 128 (E1 2026-11-04 15:58:16 commit 73d07cf)
+tuned_cutoff: 128 (E2 2026-11-04 16:02:26 commit 73d07cf)
+runtime per experiment (actual / estimated)   drift monitor range (GFLOP/s, % of baseline):
+  E9b       59.1s / 1m 00s       23.34 - 25.36  (91.9% - 99.9%)
+  total 59.1s / 1m 00s
+==== run finished 2026-11-04 16:55:59 ====
+

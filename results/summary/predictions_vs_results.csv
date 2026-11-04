@@ -15,3 +15,4 @@ P11,"overhead n<=256: 0.5%, 2.0%; n>=1024: 2.0%, 1.2%, 0.8%",partly supported
 P12,smallint max error 0.0e+00,supported
 P13,uniform Strassen/blocked Frobenius error ratio 1.0–17.0x; max 1.8e-14,supported
 P14,widerange componentwise ratio at depth>=3: 24–5861x; Frobenius ratio 1.0–19.2x,partly supported
+E9b,follower faster in both orders at 5/5 sizes (CI-significant in both at 2); placement pattern 0/5; median |ratio-1| with padded copies 3.2%,carry-over (position) effect
