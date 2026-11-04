@@ -189,6 +189,18 @@ experiments stay consistent with the tuning.
   irrelevant.
 - **Rotated order.** The order of algorithms rotates every repetition, so slow
   drift affects all of them equally.
+- **Round-robin for cross-configuration comparisons.** E5 (stride vs stride)
+  and E6 (pressure level vs pressure level) compare *different* configurations.
+  For these, every repetition is one round over all configurations, rotated
+  each round and reversed on odd rounds. Configurations being compared are then
+  measured seconds apart, never minutes.
+- **Drift monitor.** Before every configuration, a fixed reference workload
+  (blocked, n = 384, T = 64, at least 50 ms) is timed with no antagonist
+  running. It is recorded as `ref_gflops` on every row and compared with a
+  warmed-up baseline taken at start-up. A warning is printed past ±5%, and each
+  experiment's range goes into `runtimes.csv` and `run_info.txt`. Conditions
+  are measured, not assumed. `results/shakedown_2026-11-04/` shows why: a run
+  where a game was started partway through.
 - **Outputs consumed.** Every output is checksummed, and its relative difference
   from the first algorithm in the configuration is recorded
   (`rel_diff_vs_first`).
@@ -200,7 +212,11 @@ experiments stay consistent with the tuning.
   and actual runtime.
 - **Pinning.** The benchmark runs single-threaded, pinned to one logical CPU at
   high priority. E6's antagonist is pinned to a *different physical core*, so it
-  shares only the L3.
+  shares only the L3. Its 1 MB control condition fits in the antagonist's own
+  L2, so it separates "a neighbouring core is busy", which can lower the boost
+  clock, from "L3 is occupied".
+- **Machine idle during runs.** Nothing else should run during a full run: no
+  games, browsers or updates.
 
 ## Reproducing the experiments
 
