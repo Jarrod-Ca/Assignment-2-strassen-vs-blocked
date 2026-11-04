@@ -374,6 +374,31 @@ def fig_alignment(R, out):
     save(fig, out, "fig11_alignment.png")
 
 
+def fig_order(R, out):
+    if not (R / "summary" / "E9b_order.csv").exists():
+        print("skip fig12 (run analyse.py after E9b)")
+        return
+    pr = pd.read_csv(R / "summary" / "E9b_order.csv")
+    VIOLET = "#6250d6"
+    ns = list(dict.fromkeys(pr.n))
+    fig, ax = plt.subplots(figsize=(6.4, 3.2))
+    ax.axhline(1, color=INK2, lw=1)
+    for off, tag, col, mk, lab in [(-0.12, "order_A", AQUA, "s", "order A: alloc2 runs right after alloc1"),
+                                   (0.12, "order_B", VIOLET, "D", "order B: alloc1 runs right after alloc2")]:
+        g = pr[pr.tag == tag].set_index("n").loc[ns]
+        x = np.arange(len(ns)) + off
+        ax.errorbar(x, g.ratio, yerr=[g.ratio - g.ci_lo, g.ci_hi - g.ratio], fmt=mk, color=col, ms=6, capsize=3,
+                    lw=1.2, label=lab)
+    ax.set_xticks(range(len(ns)), [f"{n}\n{'control' if not pc else ''}" for n, pc in
+                                   zip(ns, pr.drop_duplicates('n').set_index('n').loc[ns].padded_copies)])
+    ax.set_xlabel("Matrix size n   (control: no padded copies)")
+    ax.set_ylabel("Time ratio  alloc2 / alloc1\n(identical computations)")
+    ax.set_title("E9b: two identical Strassen variants, both execution orders (95% CI)", loc="left")
+    ax.grid(axis="x", visible=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.28), ncol=1, fontsize=7.5)
+    save(fig, out, "fig12_order.png")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", type=Path, default=md.RESULTS)
@@ -382,7 +407,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     style()
     for f in (fig_scaling, fig_cutoff, fig_tile, fig_padding, fig_stride, fig_pressure, fig_allocation,
-              fig_accuracy, fig_drift, fig_cost_model, fig_alignment):
+              fig_accuracy, fig_drift, fig_cost_model, fig_alignment, fig_order):
         f(args.results, args.out)
 
 

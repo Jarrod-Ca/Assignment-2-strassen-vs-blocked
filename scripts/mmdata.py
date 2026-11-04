@@ -43,6 +43,22 @@ def run_info(results: Path = RESULTS, experiment: str = "E0") -> dict[str, str]:
     return info
 
 
+def paired_ratio(df: pd.DataFrame, num_key: str, den_key: str, by: list[str], seed: int = 1,
+                 draws: int = 4000) -> pd.DataFrame:
+    """Per group: median over repetitions of seconds[num]/seconds[den] (same rep), with a
+    95% bootstrap CI. Pairing by repetition cancels slow drift between repetitions."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for keys, g in df.groupby(by):
+        w = g.pivot_table(index="rep", columns="key", values="seconds")
+        r = (w[num_key] / w[den_key]).dropna().to_numpy()
+        boots = np.median(rng.choice(r, size=(draws, len(r)), replace=True), axis=1)
+        rows.append({**dict(zip(by, keys if isinstance(keys, tuple) else (keys,))), "ratio": float(np.median(r)),
+                     "ci_lo": float(np.percentile(boots, 2.5)), "ci_hi": float(np.percentile(boots, 97.5)),
+                     "reps": len(r)})
+    return pd.DataFrame(rows)
+
+
 def iqr_pct(x: pd.Series) -> float:
     """Interquartile range as a percentage of the median."""
     return float((x.quantile(0.75) - x.quantile(0.25)) / x.median() * 100.0)

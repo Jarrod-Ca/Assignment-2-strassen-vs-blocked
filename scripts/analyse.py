@@ -303,9 +303,41 @@ def main() -> None:
                        "alignment explanation supported" if a4.slower_than_blocked.sum() < 0.25 * mnm.slower_than_blocked.sum()
                        else "alignment explanation NOT supported")
 
+    # ---------------- E9b: identical variants, both orders
+    if (R / "E9b_order.csv").exists():
+        e9b = md.load("E9b_order.csv", R)
+        k1 = [k for k in e9b.key.unique() if k.endswith("#alloc1")][0]
+        k2 = [k for k in e9b.key.unique() if k.endswith("#alloc2")][0]
+        pr = md.paired_ratio(e9b, k2, k1, ["n", "tag"])
+        cut9b = int(md.run_info(R, "E9b")["tuned_cutoff"].split()[0])
+        pr["padded_copies"] = [md.predict(int(n), cut9b, "aligned", 4)["padded_n"] != n for n in pr.n]
+        pr.to_csv(out / "E9b_order.csv", index=False)
+        section("E9b follow-up: alloc2 / alloc1 for two identical aligned-4 variants (paired by repetition)")
+        lines.append("Order A runs alloc2 right after alloc1 (aligned8's slot in E9); order B runs alloc1 right after alloc2.\n")
+        table(pr, "{:.4f}")
+        def sig(row):  # -1 alloc2 faster, +1 alloc1 faster, 0 indistinguishable
+            return -1 if row.ci_hi < 1 else (1 if row.ci_lo > 1 else 0)
+        pr["sign"] = pr.apply(sig, axis=1)
+        test = pr[pr.padded_copies]
+        a = test[test.tag == "order_A"].set_index("n")["sign"]
+        b = test[test.tag == "order_B"].set_index("n")["sign"]
+        carry = int(((a == -1) & (b == 1)).sum())       # the follower wins in both orders
+        place = int(((a == b) & (a != 0)).sum())        # the same allocation wins in both orders
+        none_ = int(((a == 0) & (b == 0)).sum())
+        ctrl = pr[~pr.padded_copies]
+        verdict = ("carry-over (position) effect" if carry > max(place, none_) else
+                   "memory-placement effect" if place > max(carry, none_) else
+                   "no reproducible difference" if none_ >= max(carry, place) else "mixed")
+        lines.append(f"Sizes with padded copies: carry-over pattern at {carry}, placement pattern at {place}, "
+                     f"no significant difference at {none_} (of {len(a)}). Control (no padded copies): ratios "
+                     + ", ".join(f"{r.tag} {r.ratio:.3f} [{r.ci_lo:.3f}, {r.ci_hi:.3f}]" for r in ctrl.itertuples())
+                     + f". Verdict: {verdict}.\n")
+        P["E9b"] = (f"carry-over pattern {carry}/{len(a)}, placement {place}/{len(a)}, none {none_}/{len(a)}; "
+                    f"median |ratio-1| with padded copies {(test.ratio - 1).abs().median() * 100:.1f}%", verdict)
+
     # ---------------- predictions table
     section("Predictions (report §2.8) vs results")
-    order = ["P1", "P2", "P3", "P4", "P5", "P6", "P7a", "P7b", "P8", "P9", "P10", "P10-E9", "P11", "P12", "P13", "P14"]
+    order = ["P1", "P2", "P3", "P4", "P5", "P6", "P7a", "P7b", "P8", "P9", "P10", "P10-E9", "P11", "P12", "P13", "P14", "E9b"]
     ptab = pd.DataFrame([{"prediction": k, "measured": P[k][0], "verdict": P[k][1]} for k in order if k in P])
     ptab.to_csv(out / "predictions_vs_results.csv", index=False)
     table(ptab.set_index("prediction"))
