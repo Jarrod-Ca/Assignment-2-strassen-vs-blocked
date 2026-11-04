@@ -48,11 +48,13 @@ report/            (phase 3, 6)   report drafts and final .docx
    **Windows MSVC x64 Release (benchmarks)**.
 3. **Build → Build All**.
 4. **Test → Run CTests for MatMulComparison**, or run
-   `build\windows-release\mm_tests.exe` directly.
+   `.\build\windows-release\mm_tests.exe` directly.
 
 ### Windows: command line
 
-Open **Developer PowerShell for VS** (Start menu), `cd` to the repository root, then run:
+Open **Developer PowerShell for VS** (Start menu) **for x64**. For example, run
+`Launch-VsDevShell.ps1 -Arch amd64 -HostArch amd64`, as described under
+*Running the benchmarks*. Then `cd` to the repository root and run:
 
 ```powershell
 cmake --preset windows-release
@@ -119,14 +121,24 @@ the error-free transforms that the double-double reference relies on.
 
 ## Running the benchmarks
 
-Build the **windows-release** preset (Debug builds refuse to run the full
-experiments), then run the harness from the repository root, e.g. in the
-Visual Studio terminal:
+Build the **windows-release** preset in the Visual Studio IDE with
+**Build → Build All**. Building only the test target does not build `mm_bench`,
+and Debug builds refuse to run the full experiments.
+
+> **Command-line builds:** the terminal built into Visual Studio may start a
+> *32-bit* developer environment. The link then fails with hundreds of
+> unresolved standard-library symbols and `warning LNK4272: library machine type
+> 'x86' conflicts with target machine type 'x64'`. Build from the IDE, or first
+> switch the terminal to 64-bit with
+> `& "$env:VSINSTALLDIR\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation`.
+
+Then run the harness from the repository root. (Running it does not depend on
+the terminal's architecture.) In PowerShell the `.\` prefix is required:
 
 ```powershell
-build\windows-release\mm_bench.exe --estimate   # per-experiment runtime estimate, runs nothing
-build\windows-release\mm_bench.exe --quick      # whole pipeline at tiny sizes (seconds), writes results/quick/
-build\windows-release\mm_bench.exe              # correctness gate, then E0-E8 (full run)
+.\build\windows-release\mm_bench.exe --estimate   # per-experiment runtime estimate, runs nothing
+.\build\windows-release\mm_bench.exe --quick      # whole pipeline at tiny sizes (seconds), writes results/quick/
+.\build\windows-release\mm_bench.exe              # correctness gate, then E0-E8 (full run)
 ```
 
 Before a full run: plug in mains power, select the *High performance* or
@@ -193,5 +205,5 @@ experiments stay consistent with the tuning.
 ## Reproducing the experiments
 
 1. Build `windows-release`, then run `ctest --preset windows-release`.
-2. Run `build\windows-release\mm_bench.exe`. This regenerates every CSV in `results/`.
+2. Run `.\build\windows-release\mm_bench.exe`. This regenerates every CSV in `results/`.
 3. *(Phase 5)* Plotting scripts will regenerate every figure in `figures/` from those CSVs.

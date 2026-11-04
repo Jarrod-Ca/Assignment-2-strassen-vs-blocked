@@ -295,8 +295,9 @@ const std::vector<std::string> kTimingHeader{
 
 struct ConfigResult {
     Config cfg;
-    std::vector<std::string> labels;
+    std::vector<std::string> labels;          // "algorithm:variant"
     std::vector<double> medians;
+    std::vector<std::vector<double>> times;   // per-repetition seconds, in repetition order
 };
 
 ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg, CsvWriter& csv) {
@@ -388,7 +389,7 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
         }
     }
 
-    ConfigResult result{cfg, {}, {}};
+    ConfigResult result{cfg, {}, {}, {}};
     {
         std::ostringstream line;
         line << "  " << std::left << std::setw(16) << cfg.tag << " n=" << n;
@@ -400,6 +401,7 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
         const double med = median(l->times);
         result.labels.push_back(l->spec.algorithm + ":" + l->spec.label);
         result.medians.push_back(med);
+        result.times.push_back(l->times);
         std::ostringstream line;  // format locally so no stream state leaks into the log
         line << "      " << std::left << std::setw(9) << l->spec.algorithm << std::setw(26) << l->spec.label
              << std::right << std::setw(12) << format_time(med) << "  " << std::fixed << std::setprecision(2)
@@ -610,32 +612,26 @@ void run_experiment(Context& ctx, const std::string& id) {
     std::ostream& log = *ctx.log;
     if (id == "E0") {
         // Variance summary: coefficient of variation per variant, and drift (first vs last fifth).
-        std::ifstream in(path);  // re-read our own rows: simplest way to get per-rep times by variant
-        std::string line;
-        std::getline(in, line);
-        std::map<std::string, std::vector<double>> by;
-        while (std::getline(in, line)) {
-            std::vector<std::string> f;
-            std::stringstream ss(line);
-            std::string cell;
-            while (std::getline(ss, cell, ',')) f.push_back(cell);
-            by[f[2] + " n=" + f[4]].push_back(std::stod(f[20]));
-        }
         log << "  pilot summary (coefficient of variation = stdev / mean):\n";
-        for (const auto& [key, v] : by) {
-            double mean = 0.0;
-            for (double x : v) mean += x;
-            mean /= static_cast<double>(v.size());
-            double var = 0.0;
-            for (double x : v) var += (x - mean) * (x - mean);
-            const double cv = std::sqrt(var / static_cast<double>(v.size() - 1)) / mean;
-            const std::size_t fifth = std::max<std::size_t>(1, v.size() / 5);
-            const double first = median(std::vector<double>(v.begin(), v.begin() + static_cast<long>(fifth)));
-            const double last = median(std::vector<double>(v.end() - static_cast<long>(fifth), v.end()));
-            std::ostringstream line;
-            line << "      " << std::left << std::setw(22) << key << " CV " << std::fixed << std::setprecision(2)
-                 << 100 * cv << "%   drift (last/first fifth) " << std::setprecision(3) << last / first;
-            log << line.str() << "\n";
+        for (const ConfigResult& r : results) {
+            for (std::size_t i = 0; i < r.labels.size(); ++i) {
+                const std::vector<double>& v = r.times[i];
+                if (v.size() < 2) continue;
+                double mean = 0.0;
+                for (double x : v) mean += x;
+                mean /= static_cast<double>(v.size());
+                double var = 0.0;
+                for (double x : v) var += (x - mean) * (x - mean);
+                const double cv = std::sqrt(var / static_cast<double>(v.size() - 1)) / mean;
+                const std::ptrdiff_t fifth = static_cast<std::ptrdiff_t>(std::max<std::size_t>(1, v.size() / 5));
+                const double first = median(std::vector<double>(v.begin(), v.begin() + fifth));
+                const double last = median(std::vector<double>(v.end() - fifth, v.end()));
+                std::ostringstream out;
+                out << "      " << std::left << std::setw(24) << (r.labels[i] + " n=" + std::to_string(r.cfg.n))
+                    << " CV " << std::fixed << std::setprecision(2) << 100 * cv << "%   drift (last/first fifth) "
+                    << std::setprecision(3) << last / first;
+                log << out.str() << "\n";
+            }
         }
     } else if (id == "E1") {
         std::vector<std::string> exclude{"blocked:T=1", "blocked:untiled"};
