@@ -113,6 +113,7 @@ struct VariantSpec {
     std::size_t cutoff = kTuned;
     strassen::Padding padding = strassen::Padding::Minimal;
     std::size_t temp_pad = 0;
+    std::size_t leaf_align = 4;    // Aligned padding only
     bool alloc_each_call = false;  // strassen::multiply (allocates) instead of a reused Plan
 };
 
@@ -143,6 +144,7 @@ VariantSpec strassen_spec(std::size_t cutoff = kTuned, strassen::Padding pad = s
     if (label.empty()) {
         label = cutoff == kTuned ? "tuned" : "c=" + std::to_string(cutoff);
         if (pad == strassen::Padding::NextPow2) label += "+nextpow2";
+        if (pad == strassen::Padding::Aligned) label += "+aligned";
         if (temp_pad) label += "+temp_pad=" + std::to_string(temp_pad);
     }
     v.label = label;
@@ -209,6 +211,16 @@ std::vector<Config> plan_for(const Settings& s, const std::string& id) {
             alloc.alloc_each_call = true;
             add({"allocation", n, 0, 0, s.reps, {blocked_spec(), strassen_spec(kTuned, strassen::Padding::Minimal, 0, "tuned+plan_reused"), alloc}});
         }
+    } else if (id == "E9") {
+        std::vector<VariantSpec> v{blocked_spec(), strassen_spec()};
+        for (std::size_t a : s.e9_aligns) {
+            VariantSpec al = strassen_spec(kTuned, strassen::Padding::Aligned, 0, "tuned+aligned" + std::to_string(a));
+            al.leaf_align = a;
+            v.push_back(al);
+        }
+        for (const auto& r : s.e9_ranges)
+            for (std::size_t n = r[0]; n <= r[1]; n += r[2])
+                add({"align_" + std::to_string(r[0]), n, 0, 0, s.reps, v});
     } else if (id != "E8") {
         throw std::invalid_argument("unknown experiment " + id);
     }
@@ -223,6 +235,7 @@ strassen::Params strassen_params(const Context& ctx, const VariantSpec& v) {
     p.cutoff = resolve_cutoff(ctx, v.cutoff);
     p.padding = v.padding;
     p.temp_pad = v.temp_pad;
+    p.leaf_align = v.leaf_align;
     p.base.tile = resolve_tile(ctx, v.tile);  // VariantSpec::tile is Strassen's base-case tile
     return p;
 }
@@ -244,6 +257,7 @@ double estimate_call(const Context& ctx, const VariantSpec& v, std::size_t n) {
     p.cutoff = v.cutoff == kTuned ? 128 : v.cutoff;
     p.padding = v.padding;
     p.temp_pad = v.temp_pad;
+    p.leaf_align = v.leaf_align;
     const strassen::Stats st = strassen::predict(n, p);
     // Additions are memory-bound: assume ~8x the per-flop cost of the kernel.
     return (static_cast<double>(st.base_flops) + 8.0 * static_cast<double>(st.add_flops + st.copy_elems)) / rate;
@@ -584,6 +598,7 @@ Settings quick_settings() {
     s.e8_sizes = {32, 64};
     s.e8_cutoffs = {4, 16};
     s.e8_seeds = 1;
+    s.e9_ranges = {{60, 70, 5}};
     return s;
 }
 
@@ -598,6 +613,7 @@ const std::vector<ExperimentInfo>& all_experiments() {
         {"E6", "L3 cache pressure", "E6_cache_pressure.csv"},
         {"E7", "allocation cost: Plan reuse vs allocate per call", "E7_allocation.csv"},
         {"E8", "numerical accuracy (no timing)", "E8_accuracy.csv"},
+        {"E9", "follow-up: leaf alignment (aligned vs minimal padding)", "E9_alignment.csv"},
     };
     return list;
 }
@@ -783,8 +799,9 @@ bool correctness_gate(std::ostream& log) {
         }
         for (std::size_t c : {1u, 8u, 64u, 128u}) {
             if (c == 1 && n > 64) continue;
-            for (auto pad : {strassen::Padding::Minimal, strassen::Padding::NextPow2})
+            for (auto pad : {strassen::Padding::Minimal, strassen::Padding::NextPow2, strassen::Padding::Aligned})
                 for (std::size_t tp : {0u, 8u}) {
+                    if (pad == strassen::Padding::Aligned && c < 4) continue;
                     strassen::Params p;
                     p.cutoff = c;
                     p.padding = pad;

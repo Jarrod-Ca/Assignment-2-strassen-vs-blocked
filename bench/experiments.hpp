@@ -69,6 +69,10 @@ struct Settings {
     int e8_seeds = 3;
     int e8_max_exp = 20;              // widerange: entries span 2^-20 .. 2^21
     std::int64_t e8_int_bound = 8;    // smallint
+    // E9 alignment follow-up (added after E4): dense sweeps comparing minimal padding
+    // with leaf sizes rounded up to multiples of 4 and 8. Each range is {from, to, step}.
+    std::vector<std::vector<std::size_t>> e9_ranges{{1000, 1100, 4}, {2000, 2100, 12}};
+    std::vector<std::size_t> e9_aligns{4, 8};
 
     // Overrides for the tuned parameters (0 = take them from E1/E2 or tuned_params.txt).
     std::size_t tile_override = 0, cutoff_override = 0;
