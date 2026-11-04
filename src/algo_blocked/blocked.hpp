@@ -24,8 +24,11 @@ namespace mm::blocked {
 
 struct Params {
     // Tile edge length T (in elements). An experimental variable, swept in the
-    // benchmarks rather than hard-coded. Must be >= 1. T = 1 degenerates to an
-    // untiled i-k-j loop; T >= max(m, k, n) means a single tile.
+    // benchmarks rather than hard-coded. Must be >= 1. T >= max(m, k, n) gives a
+    // single tile, i.e. the plain untiled (but still vectorised) i-k-j loop.
+    // T = 1 performs the same i-k-j arithmetic one element at a time, so its
+    // inner loop has length 1 and cannot vectorise - a lower bound, not a
+    // realistic configuration.
     std::size_t tile = 64;
 };
 
