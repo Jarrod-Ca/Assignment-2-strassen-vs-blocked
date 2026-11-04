@@ -1,0 +1,16 @@
+prediction,measured,verdict
+P1,blocked 24.8–29.3 GFLOP/s for n >= 256,refuted (faster than predicted)
+P2,c*=128; neighbours within one power of two are up to 12.8% slower,supported; flatness (±10%) refuted
+P3,"best per n: c=128, c=128, c=128, c=128",supported
+P4,first win n=96 (ratio 0.999); sustained >=3% from n=160; ratio at 256: 0.911,supported
+P5,speedup at 4096 = 1.98x,exceeded
+P6,"tuned T=128; best per n: T=128, T=128, T=192; T=64 is 16.7% slower at worst",refuted
+P7a,blocked at 4096 is 84.6% of its peak (29.3); at 2048 85.3%,refuted
+P7b,Strassen speedup falls by at most 4.1% at 80 MB; 1 MB control changes times by <= 0.6%,supported
+P8,"blocked GFLOP/s gain from padding the stride: n=512: +4.7%, n=1024: +3.4%, n=2048: +0.9%",refuted
+P9,"jumps 6.80x, 7.13x, 7.25x; vs blocked at 2^k+1: 3.42x, 2.95x, 3.77x",supported
+P10,minimal padding Strassen/blocked 0.71–1.10 over 1000–1100 (slower than blocked at 14/26 sizes),refuted at some sizes
+P11,"overhead n<=256: 0.5%, 2.0%; n>=1024: 2.0%, 1.2%, 0.8%",partly supported
+P12,smallint max error 0.0e+00,supported
+P13,uniform Strassen/blocked Frobenius error ratio 1.0–17.0x; max 1.8e-14,supported
+P14,widerange componentwise ratio at depth>=3: 24–5861x; Frobenius ratio 1.0–19.2x,partly supported

@@ -25,9 +25,10 @@ src/algo_strassen/ strassen.*     Algorithm B (+ Plan, padding modes, operation-
 tests/                            dependency-free unit tests (run by CTest)
 bench/                            unified benchmark harness (mm_bench): environment capture,
                                   timing runner, cache-pressure thread, experiments E0-E8
-scripts/           (phase 5)      analysis and plotting
+scripts/                          analyse.py (summary tables, cost model, predictions check),
+                                  make_plots.py (all figures), mmdata.py (shared loading + cost model)
 results/                          raw CSVs, run_info.txt, runtimes.csv, tuned_params.txt
-figures/           (phase 5)      generated plots
+figures/                          generated plots (fig1-fig10)
 report/            (phase 3, 6)   report drafts and final .docx
 ```
 
@@ -222,4 +223,10 @@ experiments stay consistent with the tuning.
 
 1. Build `windows-release`, then run `ctest --preset windows-release`.
 2. Run `.\build\windows-release\mm_bench.exe`. This regenerates every CSV in `results/`.
-3. *(Phase 5)* Plotting scripts will regenerate every figure in `figures/` from those CSVs.
+3. Run `python scripts/analyse.py`. This writes the summary tables, the
+   cost-model check and the predictions-vs-results table to `results/summary/`.
+4. Run `python scripts/make_plots.py`. This regenerates every figure in `figures/`.
+
+Steps 3 and 4 need Python 3.9+ with `pandas`, `numpy`, `matplotlib` and `tabulate`
+(`pip install pandas numpy matplotlib tabulate`; Anaconda includes them). Both
+scripts read only the CSVs, so they run on any machine.
