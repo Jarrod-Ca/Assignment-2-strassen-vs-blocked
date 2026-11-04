@@ -82,8 +82,9 @@ experimental variable. None are hard-coded.
 |---|---|---|---|
 | `blocked::Params::tile` | A, and B's base case | 64 | Tile edge T. Each tile step touches 3·T²·8 bytes. |
 | `strassen::Params::cutoff` | B | 128 | Recurse only while size > cutoff; at or below it, use A's kernel |
+| `strassen::Params::leaf_align` | B | 4 | `aligned` padding only: the leaf size is rounded up to a multiple of this (E9) |
 | `strassen::Params::temp_pad` | B | 0 | Extra row-stride elements on every recursion temporary (tests power-of-two aliasing, E5) |
-| `strassen::Params::padding` | B | `minimal` | `minimal`: pad to s·2^d with s ≤ cutoff (1025 → 1056 at cutoff 64). `nextpow2`: pad to the next power of two (1025 → 2048). |
+| `strassen::Params::padding` | B | `minimal` | `minimal`: pad to s·2^d with s ≤ cutoff (1025 → 1056 at cutoff 64). `nextpow2`: pad to the next power of two (1025 → 2048). `aligned`: like `minimal`, but with the leaf size rounded up to a multiple of `leaf_align` (1028 → 1088 at cutoff 128); added after E4. |
 
 The defaults only exist so the API is usable. The values used for each
 experiment are chosen from parameter sweeps and recorded in every results row.
@@ -169,6 +170,7 @@ applications.
 | E6 | L3 occupied by a pinned antagonist thread: 0 / 1 (control) / 32 / 64 / 80 MB (P7) | `E6_cache_pressure.csv` |
 | E7 | Allocation cost: reused `Plan` vs `strassen::multiply` per call (P11) | `E7_allocation.csv` |
 | E8 | Accuracy vs the double-double reference; Frobenius, normwise and componentwise (P12–P14) | `E8_accuracy.csv` |
+| E9 | *Follow-up, added after E4.* Is minimal padding slow when the leaf size is not a multiple of 4? Compares `minimal` with `aligned` padding (leaf rounded up to a multiple of 4 or 8) over n = 1000–1100 and 2000–2100. Run separately with `--only E9`. | `E9_alignment.csv` |
 
 Tuned parameters are selected from the data, not chosen by hand. For each
 configuration, every candidate's median time is divided by the best median in

@@ -33,7 +33,7 @@ def main() -> None:
     R = args.results
     out = R / "summary"
     out.mkdir(parents=True, exist_ok=True)
-    info = md.run_info(R)
+    info = md.run_info(R, "E0")
     tile = int(info["tuned_tile"].split()[0])
     cutoff = int(info["tuned_cutoff"].split()[0])
     lines: list[str] = []
@@ -51,16 +51,20 @@ def main() -> None:
 
     # ---------------- drift monitor
     refs = []
-    for f in sorted(R.glob("E[0-7]_*.csv")):
+    for f in sorted(R.glob("E[0-9]_*.csv")):
         d = pd.read_csv(f)
+        if "ref_gflops" not in d:
+            continue  # E8 is not timed
         call = (d["ref_gflops"] != d["ref_gflops"].shift()).cumsum()
-        refs.append(d.groupby(call)["ref_gflops"].first().to_frame().assign(exp=f.name[:2]))
+        exp = f.name[:2]
+        base_exp = float(md.run_info(R, exp)["drift_monitor_baseline"].split()[0])  # that run's own baseline
+        refs.append(d.groupby(call)["ref_gflops"].first().to_frame().assign(exp=exp, baseline=base_exp))
     refs = pd.concat(refs, ignore_index=True)
     base = float(info["drift_monitor_baseline"].split()[0])
-    refs["pct"] = refs["ref_gflops"] / base * 100
+    refs["pct"] = refs["ref_gflops"] / refs["baseline"] * 100
     refs.to_csv(out / "drift_monitor.csv", index_label="reading")
     section("Drift monitor")
-    lines.append(f"{len(refs)} readings; baseline {base:.2f} GFLOP/s; "
+    lines.append(f"{len(refs)} readings; main-run baseline {base:.2f} GFLOP/s (follow-up runs use their own); "
                  f"{(refs.pct.between(95, 105)).mean() * 100:.1f}% within ±5%; range {refs.pct.min():.1f}–{refs.pct.max():.1f}%.\n")
     table(refs.groupby("exp")["pct"].agg(["min", "median", "max", "count"]), "{:.1f}")
 
@@ -262,9 +266,46 @@ def main() -> None:
     P["P14"] = (f"widerange componentwise ratio at depth>=3: {d3.r.min():.0f}–{d3.r.max():.0f}x; Frobenius ratio {wf.r.min():.1f}–{wf.r.max():.1f}x",
                 "supported" if d3.r.min() >= 1e3 else "partly supported")
 
+    # ---------------- E9 alignment follow-up (tests the explanation of P10's failure)
+    if (R / "E9_alignment.csv").exists():
+        e9 = md.load("E9_alignment.csv", R)
+        cut9 = int(md.run_info(R, "E9")["tuned_cutoff"].split()[0])  # the cutoff E9 actually ran with
+        e9s = md.summarise(e9, ["tag", "n", "key"])
+        p9 = e9s.pivot_table(index=["tag", "n"], columns="key", values="median_s")
+        b9 = [c for c in p9.columns if c.startswith("blocked")][0]
+        rel9 = p9.div(p9[b9], axis=0).drop(columns=[b9])
+        rel9.columns = [c.split("+")[-1] if "+" in c else "minimal" for c in rel9.columns]
+        for col in rel9.columns:
+            pad = "minimal" if col == "minimal" else "aligned"
+            al = int(col.replace("aligned", "")) if col.startswith("aligned") else 4
+            rel9[f"leaf_{col}"] = [md.predict(int(n), cut9, pad, al)["base_size"] for n in rel9.index.get_level_values(1)]
+        rel9.to_csv(out / "E9_alignment.csv")
+        section("E9 follow-up: leaf alignment (time relative to blocked)")
+        table(rel9, "{:.3f}")
+        variants = [c for c in rel9.columns if not c.startswith("leaf_")]
+        rows = []
+        for tag, grp in rel9.groupby(level=0):
+            for v in variants:
+                rows.append({"range": tag, "variant": v, "sizes": len(grp), "slower_than_blocked": int((grp[v] > 1).sum()),
+                             "median_ratio": grp[v].median(), "worst_ratio": grp[v].max()})
+        e9sum = pd.DataFrame(rows)
+        e9sum.to_csv(out / "E9_summary.csv", index=False)
+        table(e9sum.set_index(["range", "variant"]), "{:.3f}")
+        mn = rel9["minimal"]
+        aligned_leaf = rel9["leaf_minimal"] % 4 == 0
+        lines.append(f"Minimal padding, leaf a multiple of 4: median ratio {mn[aligned_leaf].median():.3f} "
+                     f"({aligned_leaf.sum()} sizes); otherwise {mn[~aligned_leaf].median():.3f} ({(~aligned_leaf).sum()} sizes).\n")
+        a4 = e9sum[e9sum.variant == "aligned4"]
+        mnm = e9sum[e9sum.variant == "minimal"]
+        P["P10-E9"] = (f"minimal slower than blocked at {mnm.slower_than_blocked.sum()}/{mnm.sizes.sum()} sizes; "
+                       f"aligned4 at {a4.slower_than_blocked.sum()}/{a4.sizes.sum()}; aligned8 at "
+                       f"{e9sum[e9sum.variant == 'aligned8'].slower_than_blocked.sum()}/{a4.sizes.sum()}",
+                       "alignment explanation supported" if a4.slower_than_blocked.sum() < 0.25 * mnm.slower_than_blocked.sum()
+                       else "alignment explanation NOT supported")
+
     # ---------------- predictions table
     section("Predictions (report §2.8) vs results")
-    order = ["P1", "P2", "P3", "P4", "P5", "P6", "P7a", "P7b", "P8", "P9", "P10", "P11", "P12", "P13", "P14"]
+    order = ["P1", "P2", "P3", "P4", "P5", "P6", "P7a", "P7b", "P8", "P9", "P10", "P10-E9", "P11", "P12", "P13", "P14"]
     ptab = pd.DataFrame([{"prediction": k, "measured": P[k][0], "verdict": P[k][1]} for k in order if k in P])
     ptab.to_csv(out / "predictions_vs_results.csv", index=False)
     table(ptab.set_index("prediction"))

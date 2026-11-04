@@ -23,7 +23,7 @@ from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 import mmdata as md
 
-BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
 BLUE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"]
 ORANGE_RAMP = ["#f0915f", "#d8561f", "#9c3a0f"]
 INK, INK2, MUTED, GRID, AXIS = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
@@ -334,6 +334,46 @@ def fig_cost_model(R, out):
     save(fig, out, "fig10_cost_model.png")
 
 
+def fig_alignment(R, out):
+    if not (R / "E9_alignment.csv").exists():
+        print("skip fig11 (no E9_alignment.csv)")
+        return
+    info = md.run_info(R, "E9")
+    cutoff = int(info["tuned_cutoff"].split()[0])
+    e9 = md.summarise(md.load("E9_alignment.csv", R), ["tag", "n", "key"])
+    p = e9.pivot_table(index=["tag", "n"], columns="key", values="median_s")
+    bk = [c for c in p.columns if c.startswith("blocked")][0]
+    rel = p.div(p[bk], axis=0)
+    tags = sorted(rel.index.get_level_values(0).unique(), key=lambda t: int(t.split("_")[1]))
+    fig, axes = plt.subplots(len(tags), 1, figsize=(6.4, 2.9 * len(tags)))
+    axes = np.atleast_1d(axes)
+    series = [("minimal", "minimal padding", ORANGE, "o", "minimal", 4),
+              ("aligned4", "aligned: leaf a multiple of 4", AQUA, "s", "aligned", 4),
+              ("aligned8", "aligned: leaf a multiple of 8", YELLOW, "^", "aligned", 8)]
+    for ax, tag in zip(axes, tags):
+        d = rel.loc[tag]
+        ax.axhline(1, color=INK2, lw=1)
+        for suffix, lab, col, mk, pad, al in series:
+            key = [c for c in d.columns if c.startswith("strassen") and
+                   (c.endswith(suffix) if suffix != "minimal" else "+" not in c.split(":")[1])][0]
+            leaf = np.array([md.predict(int(n), cutoff, pad, al)["base_size"] for n in d.index])
+            ax.plot(d.index, d[key], "-", color=col, lw=1.2)
+            ok = leaf % 4 == 0
+            ax.plot(d.index[ok], d[key][ok], mk, color=col, ms=5.5, label=lab)
+            if (~ok).any():
+                ax.plot(d.index[~ok], d[key][~ok], mk, color=col, mfc="white", mew=1.3, ms=5.5)
+        ax.set_ylabel("Time / blocked")
+        ax.set_title(f"n = {d.index.min()}–{d.index.max()}", loc="left")
+        ax.grid(axis="x", visible=False)
+    axes[-1].set_xlabel("Matrix size n   (hollow markers: leaf size not a multiple of 4)")
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=3, fontsize=7.5, bbox_to_anchor=(0.5, -0.04))
+    fig.suptitle("E9: rounding the leaf size up to a multiple of 4 or 8", x=0.02, ha="left", fontsize=10,
+                 fontweight="bold")
+    fig.tight_layout()
+    save(fig, out, "fig11_alignment.png")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", type=Path, default=md.RESULTS)
@@ -342,7 +382,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     style()
     for f in (fig_scaling, fig_cutoff, fig_tile, fig_padding, fig_stride, fig_pressure, fig_allocation,
-              fig_accuracy, fig_drift, fig_cost_model):
+              fig_accuracy, fig_drift, fig_cost_model, fig_alignment):
         f(args.results, args.out)
 
 

@@ -24,10 +24,17 @@ def load(name: str, results: Path = RESULTS) -> pd.DataFrame:
     return df
 
 
-def run_info(results: Path = RESULTS) -> dict[str, str]:
-    """Parse the *last completed* run section of run_info.txt into a dict."""
+def run_info(results: Path = RESULTS, experiment: str = "E0") -> dict[str, str]:
+    """Parse the last *completed* run section of run_info.txt that ran `experiment`.
+
+    Follow-up experiments (e.g. E9) are run as separate invocations, each with its
+    own section, drift-monitor baseline and timestamps."""
     text = (results / "run_info.txt").read_text()
-    sections = [s for s in text.split("==== run started") if "run finished" in s]
+    sections = [s for s in text.split("==== run started") if "run finished" in s
+                and any(line.startswith("experiments:") and experiment in line.split()
+                        for line in s.splitlines())]
+    if not sections:
+        raise ValueError(f"no completed run of {experiment} in {results / 'run_info.txt'}")
     info: dict[str, str] = {}
     for line in sections[-1].splitlines():
         if ": " in line and not line.startswith(" "):
@@ -57,7 +64,7 @@ def summarise(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
 # Strassen cost model - a direct port of strassen::predict() (src/algo_strassen),
 # whose agreement with measured operation counts is checked by the C++ tests.
 # ---------------------------------------------------------------------------
-def padded_size(n: int, cutoff: int, padding: str = "minimal") -> int:
+def padded_size(n: int, cutoff: int, padding: str = "minimal", leaf_align: int = 4) -> int:
     if n <= cutoff:
         return n
     if padding == "nextpow2":
@@ -66,11 +73,18 @@ def padded_size(n: int, cutoff: int, padding: str = "minimal") -> int:
     while s > cutoff:
         s = (s + 1) // 2
         d += 1
+    if padding == "aligned":
+        def up(x: int) -> int:
+            return -(-x // leaf_align) * leaf_align
+        while up(s) > cutoff:
+            s = (s + 1) // 2
+            d += 1
+        s = up(s)
     return s << d
 
 
-def predict(n: int, cutoff: int, padding: str = "minimal") -> dict[str, float]:
-    m = padded_size(n, cutoff, padding)
+def predict(n: int, cutoff: int, padding: str = "minimal", leaf_align: int = 4) -> dict[str, float]:
+    m = padded_size(n, cutoff, padding, leaf_align)
     s, nodes, add, copy, depth = m, 1, 0, 0, 0
     while s > cutoff:
         h = s // 2
