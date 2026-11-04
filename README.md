@@ -24,13 +24,13 @@ src/algo_blocked/  blocked.*      Algorithm A
 src/algo_strassen/ strassen.*     Algorithm B (+ Plan, padding modes, operation-count model)
 tests/                            dependency-free unit tests (run by CTest)
 bench/                            unified benchmark harness (mm_bench): environment capture,
-                                  timing runner, cache-pressure thread, experiments E0-E8
+                                  timing runner, cache-pressure thread, experiments E0–E9b
 scripts/                          analyse.py (summary tables, cost model, predictions check),
                                   make_plots.py (all figures), mmdata.py (shared loading + cost model)
 results/                          raw CSVs, run_info.txt, runtimes.csv, tuned_params.txt
-figures/                          generated plots (fig1-fig10)
+figures/                          generated plots (fig1–fig12)
 report/                           drafts/*.md (the report source, incl. pre-registrations),
-                                  build_report.py, report.docx (generated)
+                                  report.docx (the submitted report)
 ```
 
 ## Requirements
@@ -141,7 +141,7 @@ the terminal's architecture.) In PowerShell the `.\` prefix is required:
 ```powershell
 .\build\windows-release\mm_bench.exe --estimate   # per-experiment runtime estimate, runs nothing
 .\build\windows-release\mm_bench.exe --quick      # whole pipeline at tiny sizes (seconds), writes results/quick/
-.\build\windows-release\mm_bench.exe              # correctness gate, then E0-E8 (full run)
+.\build\windows-release\mm_bench.exe              # correctness gate, then E0–E9b (full run)
 ```
 
 Before a full run: plug in mains power, select the *High performance* or
@@ -178,7 +178,7 @@ Tuned parameters are selected from the data, not chosen by hand. For each
 configuration, every candidate's median time is divided by the best median in
 that configuration. The winner has the smallest geometric mean of those ratios.
 E1 selects the tile and E2 the cutoff. Both are written to
-`results/tuned_params.txt`, and E3–E8 use them, so `--only` runs of later
+`results/tuned_params.txt`, and E3–E9b use them, so `--only` runs of later
 experiments stay consistent with the tuning.
 
 ### Measurement rules
@@ -235,16 +235,9 @@ Steps 3 and 4 need Python 3.9+ with `pandas`, `numpy`, `matplotlib` and `tabulat
 (`pip install pandas numpy matplotlib tabulate`; Anaconda includes them). Both
 scripts read only the CSVs, so they run on any machine.
 
-## Building the report
+## The report
 
-`report/drafts/*.md` is the report's source. Their git history shows that
-§2 and the E9 and E9b pre-registrations were committed before the
-measurements they predict. To regenerate the Word document:
-
-```
-python report/build_report.py      # needs pandoc 2.9+ and python-docx
-```
-
-This joins the drafts, embeds `figures/*.png` with their captions, renders
-`$...$` maths as native Word equations and writes `report/report.docx`.
+`report/report.docx` is the submitted report, and `report/drafts/*.md` is its
+source text. Their git history shows that §2 and the E9 and E9b
+pre-registrations were committed before the measurements they predict.
 
