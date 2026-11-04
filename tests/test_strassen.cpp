@@ -8,11 +8,12 @@ using namespace mm;
 using strassen::Padding;
 
 namespace {
-strassen::Params params(std::size_t cutoff, Padding pad, std::size_t tile = 16) {
+strassen::Params params(std::size_t cutoff, Padding pad, std::size_t tile = 16, std::size_t temp_pad = 0) {
     strassen::Params p;
     p.cutoff = cutoff;
     p.padding = pad;
     p.base.tile = tile;
+    p.temp_pad = temp_pad;
     return p;
 }
 
@@ -112,6 +113,24 @@ TEST(strassen_measured_operation_counts_match_cost_model) {
                 const strassen::Stats measured = strassen::multiply(A, B, C, p);
                 CHECK(same_stats(measured, strassen::predict(n, p)));
             }
+}
+
+TEST(strassen_temp_pad_is_exact_and_accounted) {
+    // Padding the temporaries' stride must not change the answer, only the workspace size.
+    for (std::size_t n : {16u, 61u, 128u}) {
+        Matrix A = make_small_int(n, n, 500 + n, 8), B = make_small_int(n, n, 600 + n, 8), ref(n, n);
+        reference::naive_multiply(A, B, ref);
+        for (std::size_t pad : {1u, 3u, 8u}) {
+            const auto p = params(8, Padding::Minimal, 16, pad);
+            Matrix C(n, n);
+            const strassen::Stats st = strassen::multiply(A, B, C, p);
+            CHECK(exactly_equal(C, ref));
+            CHECK(same_stats(st, strassen::predict(n, p)));
+        }
+    }
+    // n = 256, cutoff 32, pad 8: temporaries are h x (h + 8), rounded to 8 doubles.
+    const auto st = strassen::predict(256, params(32, Padding::Minimal, 16, 8));
+    CHECK_EQ(st.workspace_bytes, 3u * (128 * 136 + 64 * 72 + 32 * 40) * sizeof(double));
 }
 
 TEST(strassen_cost_model_closed_forms) {

@@ -14,13 +14,13 @@ namespace {
 using CV = ConstMatrixView;
 using MV = MatrixView;
 
-// Each temporary is rounded up to a whole number of cache lines (8 doubles) so
-// every temporary starts 64-byte aligned inside the workspace.
-std::size_t temp_elems(std::size_t h) { return (h * h + 7) / 8 * 8; }
+// Each temporary is h rows of stride (h + pad), rounded up to a whole number of
+// cache lines (8 doubles) so every temporary starts 64-byte aligned.
+std::size_t temp_elems(std::size_t h, std::size_t pad) { return (h * (h + pad) + 7) / 8 * 8; }
 
-std::size_t workspace_elems(std::size_t m, std::size_t cutoff) {
+std::size_t workspace_elems(std::size_t m, const Params& p) {
     std::size_t total = 0;
-    for (std::size_t s = m; s > cutoff; s /= 2) total += 3 * temp_elems(s / 2);
+    for (std::size_t s = m; s > p.cutoff; s /= 2) total += 3 * temp_elems(s / 2, p.temp_pad);
     return total;
 }
 
@@ -58,6 +58,7 @@ void copy(CV X, MV Z) {
 
 struct Context {
     std::size_t cutoff;
+    std::size_t temp_pad;
     blocked::Params base;
     Stats* stats;
 };
@@ -77,8 +78,8 @@ void recurse(CV A, CV B, MV C, double* ws, Context& ctx) {
     const CV B11 = B.block(0, 0, h, h), B12 = B.block(0, h, h, h), B21 = B.block(h, 0, h, h), B22 = B.block(h, h, h, h);
     const MV C11 = C.block(0, 0, h, h), C12 = C.block(0, h, h, h), C21 = C.block(h, 0, h, h), C22 = C.block(h, h, h, h);
 
-    const std::size_t te = temp_elems(h);
-    const MV T1(ws, h, h, h), T2(ws + te, h, h, h), M(ws + 2 * te, h, h, h);
+    const std::size_t te = temp_elems(h, ctx.temp_pad), ts = h + ctx.temp_pad;
+    const MV T1(ws, h, h, ts), T2(ws + te, h, h, ts), M(ws + 2 * te, h, h, ts);
     double* child = ws + 3 * te;
 
     // Products go straight into C quadrants where possible (M1, M2, M3), so only
@@ -146,13 +147,13 @@ Stats predict(std::size_t n, const Params& p) {
     st.base_size = s;
     st.base_calls = n == 0 ? 0 : nodes;
     st.base_flops = st.base_calls * 2ull * s * s * s;
-    st.workspace_bytes = workspace_elems(st.padded_n, p.cutoff) * sizeof(double);
+    st.workspace_bytes = workspace_elems(st.padded_n, p) * sizeof(double);
     st.padding_bytes = st.padded_n == n ? 0 : 3 * st.padded_n * st.padded_n * sizeof(double);
     return st;
 }
 
 Plan::Plan(std::size_t n, const Params& p) : n_(n), m_(padded_size(n, p)), params_(p) {
-    workspace_ = AlignedBuffer(workspace_elems(m_, p.cutoff));
+    workspace_ = AlignedBuffer(workspace_elems(m_, p));
     if (m_ != n_) {
         Ap_ = Matrix(m_, m_);  // zero-initialised: the padding stays zero across executions
         Bp_ = Matrix(m_, m_);
@@ -174,7 +175,7 @@ Stats Plan::execute(ConstMatrixView A, ConstMatrixView B, MatrixView C) {
     st.padding_bytes = Ap_.bytes() + Bp_.bytes() + Cp_.bytes();
     if (n_ == 0) return st;
 
-    Context ctx{params_.cutoff, params_.base, &st};
+    Context ctx{params_.cutoff, params_.temp_pad, params_.base, &st};
     if (m_ == n_) {
         recurse(A, B, C, workspace_.data(), ctx);
     } else {

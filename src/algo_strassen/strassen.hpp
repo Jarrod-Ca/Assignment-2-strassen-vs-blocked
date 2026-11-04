@@ -26,6 +26,8 @@
 //   * workspace - each recursion level needs 3 temporaries of (n/2)^2 (two operand
 //                 sums and one product); total ~ n^2 doubles, allocated once per
 //                 Plan, never inside the recursion.
+//   * temp_pad  - optional row-stride padding of those temporaries, to test the
+//                 power-of-two cache-set aliasing hypothesis.
 #pragma once
 
 #include <cstddef>
@@ -42,6 +44,12 @@ struct Params {
     std::size_t cutoff = 128;     // recurse only while size > cutoff; must be >= 1
     Padding padding = Padding::Minimal;
     blocked::Params base{};       // tile size used by the base-case kernel
+    // Extra elements added to the row stride of every recursion temporary
+    // (stride = h + temp_pad). At power-of-two h, a stride of h doubles maps
+    // successive rows onto the same L1 cache sets; a small pad breaks that
+    // pattern. 0 = tightly packed. An experimental variable (E5), not a fix
+    // applied by default.
+    std::size_t temp_pad = 0;
 };
 
 // Exact operation and memory counts for one multiplication. Produced both by
