@@ -38,9 +38,16 @@ add_library(mm_common STATIC
 target_include_directories(mm_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(mm_common PUBLIC mm_flags)
 
-# Algorithm modules (added in phase 2):
-#   src/algo_blocked/   -> mm_blocked
-#   src/algo_strassen/  -> mm_strassen
+# ---------------------------------------------------------------------------
+# The two compared algorithms, each in its own module/library.
+# ---------------------------------------------------------------------------
+# Algorithm A: cache-blocked iterative multiplication.
+add_library(mm_blocked STATIC src/algo_blocked/blocked.cpp)
+target_link_libraries(mm_blocked PUBLIC mm_common)
+
+# Algorithm B: Strassen (uses Algorithm A's kernel below its cutoff).
+add_library(mm_strassen STATIC src/algo_strassen/strassen.cpp)
+target_link_libraries(mm_strassen PUBLIC mm_blocked)
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -50,6 +57,8 @@ add_executable(mm_tests
   tests/test_main.cpp
   tests/test_matrix.cpp
   tests/test_generators.cpp
-  tests/test_reference.cpp)
-target_link_libraries(mm_tests PRIVATE mm_common)
+  tests/test_reference.cpp
+  tests/test_blocked.cpp
+  tests/test_strassen.cpp)
+target_link_libraries(mm_tests PRIVATE mm_common mm_blocked mm_strassen)
 add_test(NAME mm_tests COMMAND mm_tests)
