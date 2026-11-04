@@ -4,7 +4,7 @@ This was the first full run of `mm_bench` on the benchmark machine, at commit
 `dcf671a` plus uncommitted fixes (hence `DIRTY` in `run_info.txt`). It is kept
 because it shows two problems that changed the harness before the official run.
 
-1. **Machine-state drift.** A game was launched partway through the run. The
+1. **Machine-state drift.** Additional workload started on the PC partway through the run. The
    same blocked multiplication (tile 192, n = 2048) ran at 26.0–26.1 GFLOP/s in
    E2–E3 and at 21.8–21.9 GFLOP/s in E5–E7, about 16% slower. Strassen slowed by
    the same proportion. Comparisons *within* a configuration were protected,

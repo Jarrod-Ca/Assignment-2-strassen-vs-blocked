@@ -54,7 +54,7 @@ The harness keeps the PA1 harness's design rules. Its `mm_bench` executable runs
 
 ## 3.5 Machine state, and what a shakedown run taught us
 
-A first full run (archived in `results/shakedown_2026-11-04/`) was spoiled by a game started partway through: the same blocked multiplication fell from 26.0 to 21.8 GFLOP/s between E3 and E7. It also exposed a design flaw. E6 had measured every 0 MB configuration first and every 80 MB one last, so drift was indistinguishable from cache pressure. Two changes followed:
+A first full run (archived in `results/shakedown_2026-11-04/`) was spoiled by additional workload on the PC partway through it: the same blocked multiplication fell from 26.0 to 21.8 GFLOP/s between E3 and E7. It also exposed a design flaw. E6 had measured every 0 MB configuration first and every 80 MB one last, so drift was indistinguishable from cache pressure. Two changes followed:
 1. **Round-robin execution for E5 and E6.**
 2. **A drift monitor.** Before every configuration, it times a fixed workload (blocked, n = 384, T = 64) and writes the reading to each row.
 

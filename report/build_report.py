@@ -1,6 +1,6 @@
 """Assemble report/drafts/*.md into report/report.docx.
 
-Usage (from the repository root):  python report/build_report.py
+Usage (from the repository root):  python report/build_report.py [--out PATH]
 Requires pandoc (2.9+) and python-docx (pip install python-docx).
 
 The drafts stay the source of truth (they are what the git history timestamps);
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DRAFTS = ROOT / "report" / "drafts"
 OUT = ROOT / "report" / "report.docx"
 PARTS = ["00-abstract.md", "01-problem-and-algorithms.md", "02-theory-and-predictions.md", "03-methodology.md",
-         "04-results.md", "05-surprises.md", "06-next.md", "07-references.md"]
+         "04-results.md", "05-surprises.md", "06-next.md", "06b-contributions-and-ai.md", "07-references.md"]
 META = """---
 title: "Cache-Blocked Iterative vs Strassen Matrix Multiplication"
 subtitle: "An empirical comparison. Advanced Algorithms, Programming Assignment 2"
@@ -138,6 +138,9 @@ def finish(path: Path) -> None:
 
 
 def main() -> None:
+    global OUT
+    if "--out" in sys.argv:
+        OUT = Path(sys.argv[sys.argv.index("--out") + 1]).resolve()
     md = META + "\n\n".join((DRAFTS / p).read_text(encoding="utf-8").strip() for p in PARTS) + "\n"
     md = size_tables(figures(md))
     missing = re.findall(r"\]\((?!figures/)[^)]*\.png\)", md)
@@ -150,8 +153,11 @@ def main() -> None:
         # --columns=20: every table row is then "longer than the line", so pandoc always
         # emits explicit relative column widths (from size_tables) instead of leaving
         # widths to the viewer, which some viewers collapse.
-        subprocess.run(["pandoc", str(src), "-f", "markdown+lists_without_preceding_blankline", "-o", str(OUT), f"--reference-doc={ref}",
-                        f"--resource-path={ROOT}", "--columns=20"], check=True)
+        try:
+            subprocess.run(["pandoc", str(src), "-f", "markdown+lists_without_preceding_blankline", "-o", str(OUT),
+                            f"--reference-doc={ref}", f"--resource-path={ROOT}", "--columns=20"], check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(f"pandoc could not write {OUT}. Is it open in Word? Close it and run again.")
     finish(OUT)
     print(f"wrote {OUT}")
 

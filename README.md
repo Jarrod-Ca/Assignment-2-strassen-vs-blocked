@@ -205,7 +205,7 @@ experiments stay consistent with the tuning.
   warmed-up baseline taken at start-up. A warning is printed past ±5%, and each
   experiment's range goes into `runtimes.csv` and `run_info.txt`. Conditions
   are measured, not assumed. `results/shakedown_2026-11-04/` shows why: a run
-  where a game was started partway through.
+  where other workload on the PC partway through caused 16–20% drift.
 - **Outputs consumed.** Every output is checksummed, and its relative difference
   from the first algorithm in the configuration is recorded
   (`rel_diff_vs_first`).
