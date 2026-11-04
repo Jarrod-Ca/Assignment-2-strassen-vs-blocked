@@ -8,6 +8,9 @@ out/
 *.user
 CMakeUserPresets.json
 
+# Benchmark smoke-test output (not for analysis)
+results/quick/
+
 # Python
 __pycache__/
 *.pyc

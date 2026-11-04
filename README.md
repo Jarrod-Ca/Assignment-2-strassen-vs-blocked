@@ -23,9 +23,11 @@ src/reference/     naive.*        correctness oracle and high-accuracy error ref
 src/algo_blocked/  blocked.*      Algorithm A
 src/algo_strassen/ strassen.*     Algorithm B (+ Plan, padding modes, operation-count model)
 tests/                            dependency-free unit tests (run by CTest)
-bench/             (phase 4)      unified benchmark harness
-scripts/           (phase 4-5)    experiment runner, analysis and plotting
-results/, figures/ (phase 5)      raw CSVs and generated plots
+bench/                            unified benchmark harness (mm_bench): environment capture,
+                                  timing runner, cache-pressure thread, experiments E0-E8
+scripts/           (phase 5)      analysis and plotting
+results/                          raw CSVs, run_info.txt, runtimes.csv, tuned_params.txt
+figures/           (phase 5)      generated plots
 report/            (phase 3, 6)   report drafts and final .docx
 ```
 
@@ -77,6 +79,7 @@ experimental variable. None are hard-coded.
 |---|---|---|---|
 | `blocked::Params::tile` | A, and B's base case | 64 | Tile edge T. Each tile step touches 3·T²·8 bytes. |
 | `strassen::Params::cutoff` | B | 128 | Recurse only while size > cutoff; at or below it, use A's kernel |
+| `strassen::Params::temp_pad` | B | 0 | Extra row-stride elements on every recursion temporary (tests power-of-two aliasing, E5) |
 | `strassen::Params::padding` | B | `minimal` | `minimal`: pad to s·2^d with s ≤ cutoff (1025 → 1056 at cutoff 64). `nextpow2`: pad to the next power of two (1025 → 2048). |
 
 The defaults only exist so the API is usable. The values used for each
@@ -114,7 +117,81 @@ the error-free transforms that the double-double reference relies on.
   The test `rng_matches_golden_values_across_platforms` checks this on every build.
 - Both algorithms receive the same `Matrix` objects generated from the same seeds.
 
+## Running the benchmarks
+
+Build the **windows-release** preset (Debug builds refuse to run the full
+experiments), then run the harness from the repository root, e.g. in the
+Visual Studio terminal:
+
+```powershell
+build\windows-release\mm_bench.exe --estimate   # per-experiment runtime estimate, runs nothing
+build\windows-release\mm_bench.exe --quick      # whole pipeline at tiny sizes (seconds), writes results/quick/
+build\windows-release\mm_bench.exe              # correctness gate, then E0-E8 (full run)
+```
+
+Before a full run: plug in mains power, select the *High performance* or
+*Ultimate Performance* power plan (recorded automatically), and close other
+applications.
+
+| Option | Effect |
+|---|---|
+| `--only E0,E3` | Run only the listed experiments |
+| `--skip-large` | Drop every configuration with n > 2048 |
+| `--reps N` | Timed repetitions per configuration (default 7; choose from E0) |
+| `--tile T`, `--cutoff C` | Override the tuned values |
+| `--bench-cpu N` | Logical CPU the benchmark thread is pinned to (default 2 = physical core 1) |
+| `--antagonist-cpu N` | Logical CPU for E6's cache-pressure thread (default 6 = physical core 3) |
+| `--out DIR` | Results directory (default `<repo>/results`) |
+
+### Experiments
+
+| ID | Question (prediction tested) | Output |
+|---|---|---|
+| E0 | Run-to-run variance and drift at fixed parameters; justifies `--reps` | `E0_pilot.csv` |
+| E1 | Tile size for the blocked kernel (P1, P6); selects the tuned tile | `E1_tile.csv` |
+| E2 | Strassen cutoff (P2, P3); selects the tuned cutoff | `E2_cutoff.csv` |
+| E3 | Scaling 64–4096 and the crossover (P1, P4, P5) | `E3_scaling.csv` |
+| E4 | `nextpow2` vs `minimal` padding around 2^k and a dense sweep (P9, P10) | `E4_padding.csv` |
+| E5 | Power-of-two leading-dimension aliasing; row-stride and temporary padding (P8) | `E5_stride.csv` |
+| E6 | L3 occupied by a pinned antagonist thread: 0 / 1 (control) / 32 / 64 / 80 MB (P7) | `E6_cache_pressure.csv` |
+| E7 | Allocation cost: reused `Plan` vs `strassen::multiply` per call (P11) | `E7_allocation.csv` |
+| E8 | Accuracy vs the double-double reference; Frobenius, normwise and componentwise (P12–P14) | `E8_accuracy.csv` |
+
+Tuned parameters are selected from the data, not chosen by hand. For each
+configuration, every candidate's median time is divided by the best median in
+that configuration. The winner has the smallest geometric mean of those ratios.
+E1 selects the tile and E2 the cutoff. Both are written to
+`results/tuned_params.txt`, and E3–E8 use them, so `--only` runs of later
+experiments stay consistent with the tuning.
+
+### Measurement rules
+
+- **Same inputs for every algorithm.** Seeds depend only on `n`, so every
+  experiment and every algorithm at a given size multiplies the same matrices.
+- **Inputs before timing.** All inputs, outputs and Strassen `Plan`s are created
+  before any timing window opens. E7 is the deliberate exception and labels its
+  allocating rows.
+- **Warm-up.** Each algorithm gets one untimed warm-up call per configuration.
+  That call also sizes an inner loop, so each timed sample lasts at least 20 ms
+  (`inner_calls` column). This keeps the 100 ns `steady_clock` resolution
+  irrelevant.
+- **Rotated order.** The order of algorithms rotates every repetition, so slow
+  drift affects all of them equally.
+- **Outputs consumed.** Every output is checksummed, and its relative difference
+  from the first algorithm in the configuration is recorded
+  (`rel_diff_vs_first`).
+- **Timer reported, not subtracted.** Timer resolution and overhead are measured
+  and written to `run_info.txt`, not subtracted from results.
+- **Run records.** `run_info.txt` (appended per run) records CPU, OS, RAM,
+  compiler, flags, git commit (with a dirty flag), power plan, pinning, priority,
+  settings and calibration. `runtimes.csv` records each experiment's estimated
+  and actual runtime.
+- **Pinning.** The benchmark runs single-threaded, pinned to one logical CPU at
+  high priority. E6's antagonist is pinned to a *different physical core*, so it
+  shares only the L3.
+
 ## Reproducing the experiments
 
-*(Phase 4–5: `scripts/run_experiments.py` will regenerate every CSV in `results/`
-and every figure in `figures/` from a clean build.)*
+1. Build `windows-release`, then run `ctest --preset windows-release`.
+2. Run `build\windows-release\mm_bench.exe`. This regenerates every CSV in `results/`.
+3. *(Phase 5)* Plotting scripts will regenerate every figure in `figures/` from those CSVs.
