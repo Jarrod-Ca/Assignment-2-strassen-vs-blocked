@@ -54,3 +54,29 @@ TEST(require_mult_shapes_rejects_mismatch) {
     CHECK_THROWS(require_mult_shapes(A, Bad, C));
     CHECK_THROWS(require_mult_shapes(A, B, Bad.view().block(0, 0, 2, 3)));
 }
+
+TEST(overlap_detection) {
+    Matrix M(8, 8), N(8, 8);
+    MatrixView top = M.view().block(0, 0, 4, 8), bottom = M.view().block(4, 0, 4, 8);
+    CHECK(!views_overlap(top, bottom));
+    CHECK(views_overlap(M, top));
+    CHECK(!views_overlap(M, N));
+    CHECK(views_overlap(M.view().block(0, 0, 2, 2), M.view().block(1, 1, 2, 2)));
+    CHECK(!views_overlap(M.view().block(0, 0, 0, 0), M));  // empty views never overlap
+    CHECK_THROWS(require_no_alias(M, N, M));
+    CHECK_THROWS(require_no_alias(N, M, M.view().block(2, 2, 2, 2)));
+    require_no_alias(top, top, bottom);  // inputs may alias each other; only C is checked
+}
+
+TEST(aligned_buffer_alignment_and_move) {
+    AlignedBuffer buf(100);
+    CHECK_EQ(buf.size(), 100u);
+    CHECK_EQ(buf.bytes(), 800u);
+    CHECK(reinterpret_cast<std::uintptr_t>(buf.data()) % kAlignment == 0);
+    buf.data()[99] = 1.5;
+    AlignedBuffer moved = std::move(buf);
+    CHECK(moved.data()[99] == 1.5);
+    CHECK(buf.data() == nullptr);
+    AlignedBuffer empty(0);
+    CHECK(empty.data() == nullptr);
+}

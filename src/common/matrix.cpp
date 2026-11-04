@@ -72,4 +72,39 @@ void require_mult_shapes(ConstMatrixView A, ConstMatrixView B, ConstMatrixView C
     }
 }
 
+bool views_overlap(ConstMatrixView X, ConstMatrixView Y) {
+    if (X.rows() == 0 || X.cols() == 0 || Y.rows() == 0 || Y.cols() == 0) return false;
+    const double* x0 = X.data();
+    const double* x1 = X.data() + (X.rows() - 1) * X.stride() + X.cols();  // one past last element
+    const double* y0 = Y.data();
+    const double* y1 = Y.data() + (Y.rows() - 1) * Y.stride() + Y.cols();
+    return x0 < y1 && y0 < x1;
+}
+
+void require_no_alias(ConstMatrixView A, ConstMatrixView B, ConstMatrixView C) {
+    if (views_overlap(C, A) || views_overlap(C, B))
+        throw std::invalid_argument("output matrix C must not overlap input A or B");
+}
+
+AlignedBuffer::AlignedBuffer(std::size_t count) : count_(count) {
+    if (count_ > 0)
+        data_ = static_cast<double*>(::operator new(count_ * sizeof(double), std::align_val_t{kAlignment}));
+}
+
+AlignedBuffer::~AlignedBuffer() {
+    if (data_) ::operator delete(data_, std::align_val_t{kAlignment});
+}
+
+AlignedBuffer::AlignedBuffer(AlignedBuffer&& other) noexcept
+    : data_(std::exchange(other.data_, nullptr)), count_(std::exchange(other.count_, 0)) {}
+
+AlignedBuffer& AlignedBuffer::operator=(AlignedBuffer&& other) noexcept {
+    if (this != &other) {
+        if (data_) ::operator delete(data_, std::align_val_t{kAlignment});
+        data_ = std::exchange(other.data_, nullptr);
+        count_ = std::exchange(other.count_, 0);
+    }
+    return *this;
+}
+
 }  // namespace mm

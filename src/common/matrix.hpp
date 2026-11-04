@@ -95,4 +95,34 @@ private:
 // Throws std::invalid_argument unless C(m x n) = A(m x k) * B(k x n) is well-formed.
 void require_mult_shapes(ConstMatrixView A, ConstMatrixView B, ConstMatrixView C);
 
+// True if the memory spans of the two views overlap (conservative: compares the
+// address ranges [first element, last element], ignoring gaps between rows).
+bool views_overlap(ConstMatrixView X, ConstMatrixView Y);
+
+// Throws std::invalid_argument if the output view overlaps either input. Every
+// multiply in this project writes C while still reading A and B, so aliasing
+// would silently corrupt the result.
+void require_no_alias(ConstMatrixView A, ConstMatrixView B, ConstMatrixView C);
+
+// Uninitialised, 64-byte-aligned scratch memory (e.g. Strassen's workspace).
+// Not zeroed: callers always write before reading.
+class AlignedBuffer {
+public:
+    AlignedBuffer() = default;
+    explicit AlignedBuffer(std::size_t count);
+    ~AlignedBuffer();
+    AlignedBuffer(const AlignedBuffer&) = delete;
+    AlignedBuffer& operator=(const AlignedBuffer&) = delete;
+    AlignedBuffer(AlignedBuffer&& other) noexcept;
+    AlignedBuffer& operator=(AlignedBuffer&& other) noexcept;
+
+    double* data() { return data_; }
+    std::size_t size() const { return count_; }
+    std::size_t bytes() const { return count_ * sizeof(double); }
+
+private:
+    double* data_ = nullptr;
+    std::size_t count_ = 0;
+};
+
 }  // namespace mm
