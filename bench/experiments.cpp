@@ -124,6 +124,10 @@ struct Config {
     std::size_t antagonist_mb = 0;
     int reps = 0;
     std::vector<VariantSpec> variants;
+    // Execution order as indices into `variants` (empty = construction order). The
+    // rotation is applied to this sequence. Variants are always *constructed*, and so
+    // allocated, in `variants` order, which lets E9b separate the two.
+    std::vector<std::size_t> exec_order{};
 };
 
 VariantSpec blocked_spec(std::size_t tile = kTuned, std::string label = "") {
@@ -221,6 +225,17 @@ std::vector<Config> plan_for(const Settings& s, const std::string& id) {
         for (const auto& r : s.e9_ranges)
             for (std::size_t n = r[0]; n <= r[1]; n += r[2])
                 add({"align_" + std::to_string(r[0]), n, 0, 0, s.reps, v});
+    } else if (id == "E9b") {
+        // Same neighbourhood as E9 (blocked, minimal, then the aligned variants), but the
+        // two aligned variants are identical: "alloc1" is constructed first, "alloc2" second.
+        VariantSpec a1 = strassen_spec(kTuned, strassen::Padding::Aligned, 0, "tuned+aligned4#alloc1");
+        VariantSpec a2 = strassen_spec(kTuned, strassen::Padding::Aligned, 0, "tuned+aligned4#alloc2");
+        a1.leaf_align = a2.leaf_align = 4;
+        const std::vector<VariantSpec> v{blocked_spec(), strassen_spec(), a1, a2};
+        for (std::size_t n : s.e9b_sizes) {
+            add({"order_A", n, 0, 0, s.e9b_reps, v, {0, 1, 2, 3}});  // alloc2 runs right after alloc1 (as aligned8 did in E9)
+            add({"order_B", n, 0, 0, s.e9b_reps, v, {0, 1, 3, 2}});  // alloc1 runs right after alloc2
+        }
     } else if (id != "E8") {
         throw std::invalid_argument("unknown experiment " + id);
     }
@@ -414,7 +429,8 @@ ConfigResult run_config(Context& ctx, const std::string& exp, const Config& cfg,
     const std::size_t V = lives.size();
     for (int rep = 0; rep < cfg.reps; ++rep) {
         for (std::size_t k = 0; k < V; ++k) {
-            Live& l = *lives[(k + static_cast<std::size_t>(rep)) % V];
+            const std::size_t pos = (k + static_cast<std::size_t>(rep)) % V;
+            Live& l = *lives[cfg.exec_order.empty() ? pos : cfg.exec_order[pos]];
             const double t0 = now_seconds();
             for (int i = 0; i < l.inner; ++i) l.run();
             const double seconds = (now_seconds() - t0) / l.inner;
@@ -599,6 +615,8 @@ Settings quick_settings() {
     s.e8_cutoffs = {4, 16};
     s.e8_seeds = 1;
     s.e9_ranges = {{60, 70, 5}};
+    s.e9b_sizes = {60, 64};
+    s.e9b_reps = 3;
     return s;
 }
 
@@ -614,6 +632,7 @@ const std::vector<ExperimentInfo>& all_experiments() {
         {"E7", "allocation cost: Plan reuse vs allocate per call", "E7_allocation.csv"},
         {"E8", "numerical accuracy (no timing)", "E8_accuracy.csv"},
         {"E9", "follow-up: leaf alignment (aligned vs minimal padding)", "E9_alignment.csv"},
+        {"E9b", "follow-up: identical variants, both orders (carry-over vs placement)", "E9b_order.csv"},
     };
     return list;
 }

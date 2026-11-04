@@ -73,6 +73,11 @@ struct Settings {
     // with leaf sizes rounded up to multiples of 4 and 8. Each range is {from, to, step}.
     std::vector<std::vector<std::size_t>> e9_ranges{{1000, 1100, 4}, {2000, 2100, 12}};
     std::vector<std::size_t> e9_aligns{4, 8};
+    // E9b (added after E9): two *identical* aligned-4 variants, run in both orders, to
+    // tell a carry-over effect (position in the rotation) from memory placement.
+    // 1024 is the control: m = n, so no padded copies are made.
+    std::vector<std::size_t> e9b_sizes{1000, 1012, 1016, 1092, 1100, 1024};
+    int e9b_reps = 15;
 
     // Overrides for the tuned parameters (0 = take them from E1/E2 or tuned_params.txt).
     std::size_t tile_override = 0, cutoff_override = 0;
