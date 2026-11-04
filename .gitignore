@@ -1,0 +1,17 @@
+# Build output
+build/
+out/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Course material (not part of the submission)
+Context Files/
